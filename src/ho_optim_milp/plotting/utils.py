@@ -32,29 +32,29 @@ class Curve:
     y_mean: np.ndarray
 
 
-def get_default_optim_result_path(dataset_dir: str) -> str:
+def get_default_optim_result_path(cwd: str, dataset_dir: str) -> str:
     """Return default optimization metrics Parquet path."""
-    return os.path.join(
-        os.getcwd(),
-        dataset_dir,
-        "optim_results",
-        "gp_optim_result_metrics.parquet",
+    optim_path = os.path.join(
+        cwd, dataset_dir, "optim_results", "optim_result_metrics.parquet"
     )
+    if not os.path.isfile(optim_path):
+        raise ValueError(f"File '{optim_path}' does not exist.")
+    return optim_path
 
 
-def get_default_reference_result_path(dataset_dir: str) -> str:
+def get_default_reference_result_path(cwd: str, dataset_dir: str) -> str:
     """Return default reference metrics Parquet path."""
-    return os.path.join(
-        os.getcwd(),
-        dataset_dir,
-        "reference_results",
-        "reference_result_metrics.parquet",
+    ref_path = os.path.join(
+        cwd, dataset_dir, "reference_results", "reference_result_metrics.parquet"
     )
+    if not os.path.isfile(ref_path):
+        raise ValueError(f"File '{ref_path}' does not exist.")
+    return ref_path
 
 
-def get_default_plot_path() -> str:
+def get_default_plot_path(cwd: str) -> str:
     """Return default output directory for plots."""
-    plots_dir = os.path.join(os.getcwd(), "plots")
+    plots_dir = os.path.join(cwd, "plots")
     os.makedirs(plots_dir, exist_ok=True)
     return plots_dir
 

@@ -1,0 +1,18 @@
+lambda_r: 0.0
+use_l3_filtered_sinr: true
+rrc:
+  t_res_ms: 40
+
+  q_in_db: -6
+  q_out_db: -8
+
+  n310: 1
+  n311: 10
+  t310_ms: 1000
+
+  t_ho_prep_ms_simulated: 40
+  t_ho_exec_ms_simulated: 80
+  t_rlfr_ms_simulated: 1000
+  t_mts_ms: 1000
+
+  l3_filter_coef: 1

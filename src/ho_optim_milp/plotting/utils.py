@@ -32,27 +32,29 @@ class Curve:
     y_mean: np.ndarray
 
 
-def get_default_optim_path(dataset_root: str) -> str:
+def get_default_optim_result_path(dataset_dir: str) -> str:
     """Return default optimization metrics Parquet path."""
     return os.path.join(
-        dataset_root,
+        os.getcwd(),
+        dataset_dir,
         "optim_results",
         "gp_optim_result_metrics.parquet",
     )
 
 
-def get_default_reference_path(dataset_root: str) -> str:
+def get_default_reference_result_path(dataset_dir: str) -> str:
     """Return default reference metrics Parquet path."""
     return os.path.join(
-        dataset_root,
+        os.getcwd(),
+        dataset_dir,
         "reference_results",
         "reference_result_metrics.parquet",
     )
 
 
-def get_default_plots_dir() -> str:
+def get_default_plot_path() -> str:
     """Return default output directory for plots."""
-    plots_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plots")
+    plots_dir = os.path.join(os.getcwd(), "plots")
     os.makedirs(plots_dir, exist_ok=True)
     return plots_dir
 

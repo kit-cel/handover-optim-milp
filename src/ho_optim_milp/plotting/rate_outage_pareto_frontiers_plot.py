@@ -1,21 +1,22 @@
 """Plot rate-outage Pareto frontiers from the published dataset."""
 
+import os
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .utils import Curve
+from .colors import BLUE, GREEN, PURPLE, RED
+from . import utils as ut
+
 
 matplotlib.use("Agg")
 
-BLUE = "#0072B2"
-RED = "#D55E00"
-GREEN = "#009E73"
-PURPLE = "#CC79A7"
+REF_SCATTER_PERCENTILES: list[float] = [90.0, 95.0, 99.0]
 
 
 def _find_point_for_lambda(
-    curve: Curve,
+    curve: ut.Curve,
     lambda_value: float,
     atol: float = 1e-12,
 ) -> tuple[float, float] | None:
@@ -30,23 +31,49 @@ def _find_point_for_lambda(
     return float(outage), float(rate)
 
 
+def _get_sorted_clipped_percentiles(pcts: list[float] | None) -> list[float]:
+    """Clip percentiles to [0, 100] and sort uniquely."""
+    if pcts is None:
+        return []
+    return sorted({float(np.clip(float(p), 0.0, 100.0)) for p in pcts})
+
+
 def plot_pareto_fronts(
-    opt: Curve,
-    ref_curves: list[Curve],
-    bound_conn: np.ndarray,
-    bound_cap: np.ndarray,
+    optim_path: str,
+    reference_path: str,
     out_path: str,
     print_values: bool = False,
     annotate_lambdas: bool = True,
 ) -> None:
     """Create Pareto scatter plot matching the target paper style."""
+    ref_percentiles = _get_sorted_clipped_percentiles(REF_SCATTER_PERCENTILES)
+
+    opt_curve = ut.load_optimization_curve(optim_path)
+    ref_agg = ut.load_reference_parameter_aggregation(reference_path)
+    bound_conn, bound_cap = ut.reference_pareto_bound(ref_agg)
+
+    ref_curves: list[ut.Curve] = []
+    for q in ref_percentiles:
+        curve = ut.reference_curve_for_quantile_top_tail(
+            ref_agg,
+            opt_curve.lam,
+            q,
+        )
+        ref_curves.append(curve)
+
+    pct_tag = "q-" + "-".join(f"{q:g}" for q in ref_percentiles)
+    full_out_path = os.path.join(
+        out_path,
+        f"rate_outage_pareto_frontiers_{pct_tag}.png",
+    )
+
     fig, ax = plt.subplots(figsize=(6.6, 4.6))
 
     # MILP / optimization Pareto front
-    opt_out = 100.0 * (1.0 - opt.x_mean)
+    opt_out = 100.0 * (1.0 - opt_curve.x_mean)
     ax.plot(
         opt_out,
-        opt.y_mean,
+        opt_curve.y_mean,
         color=BLUE,
         linewidth=2.0,
         linestyle="-",
@@ -110,7 +137,7 @@ def plot_pareto_fronts(
     )
 
     if annotate_lambdas:
-        p_low = _find_point_for_lambda(opt, 0.1)
+        p_low = _find_point_for_lambda(opt_curve, 0.1)
         if p_low is not None:
             ax.annotate(
                 r"$\lambda=0.1$",
@@ -121,7 +148,7 @@ def plot_pareto_fronts(
                 arrowprops=dict(arrowstyle="->", linewidth=0.8),
             )
 
-        p_high = _find_point_for_lambda(opt, 1000.0)
+        p_high = _find_point_for_lambda(opt_curve, 1000.0)
         if p_high is not None:
             ax.annotate(
                 r"$\lambda=1000$",
@@ -135,7 +162,7 @@ def plot_pareto_fronts(
     if print_values:
         print("Optimization points (lambda,outage,avg_rate):")
         print("lambda,outage,avg_rate")
-        for lam, outage, rate in zip(opt.lam, opt_out, opt.y_mean):
+        for lam, outage, rate in zip(opt_curve.lam, opt_out, opt_curve.y_mean):
             print(f"{lam},{outage:.5f},{rate:.5f}")
 
         for curve in ref_curves:
@@ -151,5 +178,7 @@ def plot_pareto_fronts(
             print(f"{outage:.5f},{rate:.5f}")
 
     fig.tight_layout()
-    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    fig.savefig(full_out_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
+
+    print(f"Saved figure to: {out_path}")

@@ -1,30 +1,44 @@
 """Plot mean rate and connected time versus lambda from the published dataset."""
 
+import os
+
 import matplotlib
 import matplotlib.pyplot as plt
 
-from .utils import Curve
+from .colors import BLUE, RED
+from . import utils as ut
 
 matplotlib.use("Agg")
 
-BLUE = "#0072B2"
-RED = "#D55E00"
-
 
 def plot_rate_connectivity_tradeoff(
-    opt: Curve,
-    ref_q99: Curve,
+    optim_path: str,
+    reference_path: str,
     out_path: str,
     print_values: bool = True,
 ) -> None:
     """Create tradeoff plot matching the target paper style."""
+    opt_curve = ut.load_optimization_curve(optim_path)
+    ref_agg = ut.load_reference_parameter_aggregation(reference_path)
+
+    ref_q99 = ut.reference_curve_for_quantile_top_tail(
+        ref_agg,
+        opt_curve.lam,
+        99.0,
+    )
+
+    full_out_path = os.path.join(
+        out_path,
+        "rate_connected_time_vs_lambda_q99.png",
+    )
+
     fig, ax_left = plt.subplots(figsize=(6.6, 5.0))
     ax_right = ax_left.twinx()
 
     # Left axis: rate
     opt_rate = ax_left.plot(
-        opt.lam,
-        opt.y_mean,
+        opt_curve.lam,
+        opt_curve.y_mean,
         color=BLUE,
         linewidth=2.0,
         linestyle="-",
@@ -50,8 +64,8 @@ def plot_rate_connectivity_tradeoff(
 
     # Right axis: connected time
     opt_conn = ax_right.plot(
-        opt.lam,
-        opt.x_mean,
+        opt_curve.lam,
+        opt_curve.x_mean,
         color=BLUE,
         linewidth=2.0,
         linestyle="--",
@@ -106,7 +120,7 @@ def plot_rate_connectivity_tradeoff(
     if print_values:
         print("Optimization points (lambda,avg_rate,rel_conn):")
         print("lambda,avg_rate,rel_conn")
-        for lam, rate, conn in zip(opt.lam, opt.y_mean, opt.x_mean):
+        for lam, rate, conn in zip(opt_curve.lam, opt_curve.y_mean, opt_curve.x_mean):
             print(f"{lam},{rate:.5f},{conn:.5f}")
 
         print("Reference q=99 points (lambda,avg_rate,rel_conn):")
@@ -115,5 +129,7 @@ def plot_rate_connectivity_tradeoff(
             print(f"{lam},{rate:.5f},{conn:.5f}")
 
     fig.tight_layout()
-    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    fig.savefig(full_out_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
+
+    print(f"Saved figure to: {full_out_path}")

@@ -1,4 +1,4 @@
-![Pylint](https://img.shields.io/endpoint?url=https://<your-user>.github.io/<your-repo>/pylint-badge.json)
+![Pylint](https://img.shields.io/endpoint?url=https://kit-cel.github.io/handover-optim-milp/pylint-badge.json)
 
 # MILP-based Optimal Handover Decisions: A Benchmark for Mobility Management Algorithms
 MILP benchmark for UE RRC handover optimization.

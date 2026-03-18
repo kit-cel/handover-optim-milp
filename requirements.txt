@@ -1,0 +1,10 @@
+gurobipy==13.0.1
+h5py==3.16.0
+matplotlib==3.10.8
+numpy==2.4.3
+pandas==3.0.1
+pyarrow==23.0.1
+pydantic==2.12.5
+PyYAML==6.0.3
+scipy==1.17.1
+setuptools==80.10.2

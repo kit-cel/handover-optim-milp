@@ -4,10 +4,10 @@ import argparse
 import csv
 import os
 
-from src.ho_optim_milp.common.utils import nested_dict_to_str
-from src.ho_optim_milp.optimization.optim_config import OptimConfig
-from src.ho_optim_milp.optimization.milp import HandoverOptimizerMILP
-from src.ho_optim_milp.result_manager.simulation_result import SimulationResults
+from ho_optim_milp.common.utils import nested_dict_to_str
+from ho_optim_milp.optimization.optim_config import OptimConfig
+from ho_optim_milp.optimization.milp import HandoverOptimizerMILP
+from ho_optim_milp.result_manager.simulation_result import SimulationResults
 
 
 def add_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -32,12 +32,14 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
         "--ep-idx",
         dest="ep_idx",
         type=int,
+        required=True,
         help="Episode index.",
     )
     parser.add_argument(
         "--ue-idx",
         dest="ue_idx",
         type=int,
+        required=True,
         help="Index of the UE in the dataset.",
     )
 

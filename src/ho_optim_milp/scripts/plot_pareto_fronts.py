@@ -1,16 +1,16 @@
-"""Plot"""
+"""Plot average achieved rate-outage Pareto frontiers."""
 
 import argparse
 
-from src.ho_optim_milp.plotting import plot_rate_connectivity_tradeoff
-from src.ho_optim_milp.plotting import utils as ut
+from ho_optim_milp.plotting import plot_pareto_fronts
+from ho_optim_milp.plotting import utils as ut
 
 DATASET_DIR: str = "dataset_root"
 
 
 def add_parser(subparsers: argparse._SubParsersAction, cwd: str) -> None:
     """Argument parser for main function."""
-    parser: argparse.ArgumentParser = subparsers.add_parser("plot_tradeoff")
+    parser: argparse.ArgumentParser = subparsers.add_parser("plot_pareto_fronts")
 
     parser.add_argument(
         "--optim-path",
@@ -41,12 +41,13 @@ def add_parser(subparsers: argparse._SubParsersAction, cwd: str) -> None:
 
 
 def main(optim_path: str, reference_path: str, out_path: str, **kwargs) -> int:
-    """Load published datasets and plot the tradeoff versus lambda."""
-    plot_rate_connectivity_tradeoff(
+    """Load published datasets and plot Pareto frontiers."""
+    plot_pareto_fronts(
         optim_path=optim_path,
         reference_path=reference_path,
         out_path=out_path,
         print_values=kwargs.get("print_values", False),
+        annotate_lambdas=True,
     )
 
     return 0

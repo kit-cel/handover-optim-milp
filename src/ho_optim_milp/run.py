@@ -17,7 +17,7 @@ import argparse
 import os
 import sys
 
-from scripts import (
+from ho_optim_milp.scripts import (
     plot_pareto_fronts,
     plot_tradeoff,
     run_optimization,
@@ -25,7 +25,7 @@ from scripts import (
 )
 
 
-def run() -> int:
+def main() -> int:
     """Run the Handover Optimization Framework."""
     parser = argparse.ArgumentParser(
         description="Handover Optimization Framework\n\n"
@@ -35,7 +35,7 @@ def run() -> int:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    cwd = os.path.dirname(os.path.abspath(__file__))
+    cwd = os.getcwd()
 
     # register commands
     plot_pareto_fronts.add_parser(subparsers, cwd=cwd)
@@ -59,4 +59,4 @@ def run() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(run())
+    sys.exit(main())

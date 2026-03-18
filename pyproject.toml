@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ho_optim_milp"
+version = "1.0.0"
+description = "Framework for handover optimization using mixed-integer linear programming."
+authors = [
+    { name = "Johannes Voigt", email = "johannes.voigt@kit.edu" }
+]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools]
+include-package-data = true
+
+[project.scripts]
+ho-optim = "ho_optim_milp.run:main"
+
+[project.urls]
+Repository = "https://github.com/kit-cel/handover-optim-milp"

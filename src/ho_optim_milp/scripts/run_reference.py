@@ -4,10 +4,10 @@ import argparse
 import csv
 import os
 
-from src.ho_optim_milp.common.utils import nested_dict_to_str
-from src.ho_optim_milp.reference.reference import RRCReferenceSimulation
-from src.ho_optim_milp.reference.rrc_config import RRCConfig
-from src.ho_optim_milp.result_manager.simulation_result import SimulationResults
+from ho_optim_milp.common.utils import nested_dict_to_str
+from ho_optim_milp.reference.reference import RRCReferenceSimulation
+from ho_optim_milp.reference.rrc_config import RRCConfig
+from ho_optim_milp.result_manager.simulation_result import SimulationResults
 
 
 def add_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -32,6 +32,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
         "--ep-idx",
         dest="ep_idx",
         type=int,
+        required=True,
         help="Episode index.",
     )
 

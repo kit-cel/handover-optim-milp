@@ -73,6 +73,7 @@ class EpisodeResult:
         cls,
         ep_name: str,
         data: dict[str, NDArray | np.ma.MaskedArray],
+        *,
         meta_attrs: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
         config_common: dict[str, Any] | None = None,

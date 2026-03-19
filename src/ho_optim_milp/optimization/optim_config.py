@@ -67,14 +67,6 @@ class OptimConfig(BaseConfig):
         return config
 
     @model_validator(mode="after")
-    def _set_seeds(self) -> "OptimConfig":
-        """Set the seed for the environment configuration."""
-        if self.seed is not None:
-            # Forward the seed to lower-level configurations
-            pass
-        return self
-
-    @model_validator(mode="after")
     def _set_log_directories(self) -> "OptimConfig":
         log_dir = os.path.join(self.base_dir, self.log_dir)
         if not os.path.exists(log_dir):

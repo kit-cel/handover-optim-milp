@@ -84,9 +84,6 @@ class SimulationResults:
     @classmethod
     def _validate_file(cls, file_path: str) -> dict[str, Any]:
         """Validate basic structure of the merged HDF5 file."""
-        if not os.path.isfile(file_path):
-            raise FileNotFoundError(f"HDF5 file not found: {file_path}")
-
         try:
             with h5py.File(file_path, "r") as f:
                 info: dict[str, Any] = {
@@ -212,6 +209,9 @@ class SimulationResults:
             If True, require every selected key to exist in every episode and enforce
             consistent time dimension within an episode. If False, skip missing keys.
         """
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"HDF5 file not found: {path}")
+
         instance = cls(env=None)
         instance._file_path = path
 

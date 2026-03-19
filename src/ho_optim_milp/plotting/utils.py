@@ -203,11 +203,8 @@ def reference_curve_for_quantile_top_tail(
         if selected.size == 0:
             selected = np.array([int(np.argmax(s_k))], dtype=int)
 
-        xs = l_c_k[selected]
-        ys = l_r_k[selected]
-
-        x_mean[idx] = float(xs.mean())
-        y_mean[idx] = float(ys.mean())
+        x_mean[idx] = float(l_c_k[selected].mean())
+        y_mean[idx] = float(l_r_k[selected].mean())
         n_sel_vec[idx] = int(selected.size)
 
     return Curve(

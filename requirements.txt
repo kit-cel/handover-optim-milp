@@ -8,3 +8,4 @@ pydantic==2.12.5
 PyYAML==6.0.3
 scipy==1.17.1
 setuptools==80.10.2
+wandb==0.25.1

@@ -3,7 +3,6 @@
 import os
 import csv
 from typing import Any, TYPE_CHECKING
-import logging
 
 import numpy as np
 
@@ -14,14 +13,6 @@ from ..dataloader.preprocessing import preprocess_dataset
 if TYPE_CHECKING:
     from .rrc_config import RRCConfig
     from ..result_manager.episode_result import EpisodeResult
-
-DEBUG_LVL = logging.WARNING
-
-
-logging.basicConfig(
-    level=DEBUG_LVL,
-    format="%(message)s",
-)
 
 
 class RRCReferenceSimulation:
@@ -253,8 +244,6 @@ class RRCReferenceSimulation:
         dt_s = self.simulation_time_ms / 1000.0
 
         ref_c_mean_ue, max_c_mean_ue = self._get_mean_capacity(aggregated=False)
-        ref_c_mean_ue = np.asarray(ref_c_mean_ue)  # (n_ue,)
-        max_c_mean_ue = np.asarray(max_c_mean_ue)  # (n_ue,)
         ref_t_connected_ue = np.asarray(
             self._get_connected_time(aggregated=False)
         )  # (n_ue,)
@@ -277,29 +266,26 @@ class RRCReferenceSimulation:
             )
 
         pp_counts_ue, pp_per_s_ue = self._get_num_pp(aggregated=False)
-        pp_counts_ue = np.asarray(pp_counts_ue)  # (n_ue,)
-        pp_per_s_ue = np.asarray(pp_per_s_ue)  # (n_ue,)
 
         out: dict[int, dict[str, Any]] = {}
         for ue_idx in range(self.n_ue):
             ref_n_ho = int(np.sum(ho_end[:, ue_idx]))
-            ref_num_pp = int(pp_counts_ue[ue_idx])
+            ref_num_pp = int(np.asarray(pp_counts_ue)[ue_idx])
             ref_num_hof = int(np.sum(hof[:, ue_idx]))
-            ref_num_rlf = int(np.sum(rlf[:, ue_idx]))
 
             out[int(ue_idx)] = {
                 "simulation_id": self.rrc_config.simulation_id,
                 "simulated_time_s": float(dt_s),
                 "simulated_steps": self.n_steps,
                 "ue_index": ue_idx,
-                "ref_mean_capacity": float(ref_c_mean_ue[ue_idx]),
-                "max_mean_capacity": float(max_c_mean_ue[ue_idx]),
+                "ref_mean_capacity": float(np.asarray(ref_c_mean_ue)[ue_idx]),
+                "max_mean_capacity": float(np.asarray(max_c_mean_ue)[ue_idx]),
                 "ref_rel_connected_time": float(ref_t_connected_ue[ue_idx])
                 / float(self.n_steps),
                 "ref_num_ho": ref_n_ho,
                 "ref_ho_per_s": ref_n_ho / dt_s,
                 "ref_num_pp": ref_num_pp,
-                "ref_pp_per_s": float(pp_per_s_ue[ue_idx]),
+                "ref_pp_per_s": float(np.asarray(pp_per_s_ue)[ue_idx]),
                 "ref_pp_rate": (
                     (ref_num_pp / ref_n_ho) if ref_n_ho > 0 else float("inf")
                 ),
@@ -309,7 +295,7 @@ class RRCReferenceSimulation:
                     if (ref_num_hof + ref_n_ho) > 0
                     else 0.0
                 ),
-                "ref_num_rlf": ref_num_rlf,
+                "ref_num_rlf": int(np.sum(rlf[:, ue_idx])),
             }
 
         return out

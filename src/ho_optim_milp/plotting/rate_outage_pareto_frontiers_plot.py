@@ -145,7 +145,7 @@ def plot_pareto_fronts(
                 xytext=(2.75, 5.84),
                 textcoords="data",
                 fontsize=9,
-                arrowprops=dict(arrowstyle="->", linewidth=0.8),
+                arrowprops={"arrowstyle": "->", "linewidth": 0.8},
             )
 
         p_high = _find_point_for_lambda(opt_curve, 1000.0)
@@ -156,7 +156,7 @@ def plot_pareto_fronts(
                 xytext=(2.3, 5.72),
                 textcoords="data",
                 fontsize=9,
-                arrowprops=dict(arrowstyle="->", linewidth=0.8),
+                arrowprops={"arrowstyle": "->", "linewidth": 0.8},
             )
 
     if print_values:

@@ -31,6 +31,7 @@ class WandBLogger:
     def __init__(
         self,
         config: "BaseConfig",
+        *,
         project: str | None = None,
         run_id: str | None = None,
         run_name: str | None = None,

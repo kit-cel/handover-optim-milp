@@ -58,7 +58,6 @@ def main(config: str, dataset: str, ep_idx: int, ue_idx: int, **kwargs) -> int:
 
     path_to_dataset = os.path.join(cwd, "dataset_root", "network_data", dataset)
 
-    dataset_name = os.path.splitext(os.path.basename(path_to_dataset))[0]
     sim_results = SimulationResults.load(
         path=path_to_dataset,
         max_steps=max_steps,
@@ -77,7 +76,7 @@ def main(config: str, dataset: str, ep_idx: int, ue_idx: int, **kwargs) -> int:
     # if not optimal, return early without logging results (2 is optimal)
     if milp_solver.model.status != 2:
         print(
-            f"Optimization for dataset {dataset_name}, "
+            f"Optimization for episode {ep_idx}, "
             f"UE {ue_idx} did not find an optimal solution. "
             f"Status: {milp_solver.model.status}"
         )
@@ -91,7 +90,9 @@ def main(config: str, dataset: str, ep_idx: int, ue_idx: int, **kwargs) -> int:
     full_log_file_name = (
         f"optim_full_result_ue{ue_idx}_lambda{milp_solver.lambda_r}.csv"
     )
-    milp_solver.log_results_to_csv(file_name=full_log_file_name, subfolder=dataset_name)
+    milp_solver.log_results_to_csv(
+        file_name=full_log_file_name, subfolder=f"ep_{ep_idx:05d}"
+    )
 
     meta = {
         "t_res_ms": cfg.rrc.t_res_ms,
@@ -116,7 +117,7 @@ def main(config: str, dataset: str, ep_idx: int, ue_idx: int, **kwargs) -> int:
 
     meta.update(
         {
-            "dataset_name": dataset_name,
+            "dataset_name": os.path.splitext(os.path.basename(path_to_dataset))[0],
             "ep_idx": ep_idx,
             "ue_idx": ue_idx,
             "seed": ep_result.config.get("seed", None),
@@ -126,7 +127,7 @@ def main(config: str, dataset: str, ep_idx: int, ue_idx: int, **kwargs) -> int:
     print(f"Meta:\n{nested_dict_to_str(meta)}\n")
 
     # Log UE results metrics to CSV including RRC parameters
-    log_dir = os.path.join(cfg.base_dir, "results", "optimization", dataset_name)
+    log_dir = os.path.join(cfg.base_dir, "results", "optimization")
     os.makedirs(log_dir, exist_ok=True)
     log_file_name = f"metrics_ep{ep_idx}_lambda{milp_solver.lambda_r}.csv"
     full_log_path = os.path.join(log_dir, log_file_name)

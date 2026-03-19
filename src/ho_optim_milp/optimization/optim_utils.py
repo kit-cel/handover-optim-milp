@@ -44,12 +44,15 @@ def lin_prod_bin_int(
     b: GPScalar,
     x: GPScalar,
     x_ub: int,
-    name: str,
+    *,
+    name: str | None,
 ) -> None:
     """Enforce y = b * x for binary b and integer x in [0, x_ub]."""
     y_var = _as_var(y)
     b_var = _as_var(b)
     x_var = _as_var(x)
+    name = "constr" if name is None else name
+
     model.addConstr(y_var <= x_var, name=f"{name}_ub_x")
     model.addConstr(y_var <= x_ub * b_var, name=f"{name}_ub_b")
     model.addConstr(y_var >= x_var - x_ub * (1 - b_var), name=f"{name}_lb")
@@ -62,11 +65,13 @@ def lin_saturate_min(
     u_raw: GPScalar,
     u_sat_ub: int,
     u_raw_ub: int,
-    name: str,
+    *,
+    name: str | None = None,
 ) -> gp.Var:
     """Linearized saturation function."""
     u_sat_var = _as_var(u_sat)
     u_raw_var = _as_var(u_raw)
+    name = "constr" if name is None else name
 
     b_overflow = model.addVar(vtype=GRB.BINARY, name=f"{name}_over")
 

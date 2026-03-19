@@ -86,10 +86,10 @@ class ReferenceRRC:
 
         self._sync_indicator_cnt = 0  # counts N310/N311 events
 
-        self._pcell: int | None = None
-        self._prev_pcell: int | None = None
-        self._report_cell: int | None = None
-        self._ho_target_cell: int | None = None
+        self.pcell: int | None = None
+        self.prev_pcell: int | None = None
+        self.reporting_cell: int | None = None
+        self.target_cell: int | None = None
 
         self.flag_ho_exec_started: bool = False
         self.flag_ho_exec_success: bool = False
@@ -164,10 +164,10 @@ class ReferenceRRC:
             raise RuntimeError("RRC UE not initialized with PHY measurements")
         if self.state != RrcState.RRC_IDLE:
             raise RuntimeError("RRC UE not in IDLE state for attach")
-        if self._pcell is not None:
+        if self.pcell is not None:
             raise RuntimeError("RRC UE already has a primary cell")
         self._log("Attaching", logging.INFO)
-        self._pcell = int(np.argmax(self.rsrp))
+        self.pcell = int(np.argmax(self.rsrp))
         self.state = RrcState.CONNECTED_NORMAL
 
     ### PHY updates and sync state
@@ -209,8 +209,8 @@ class ReferenceRRC:
         if self._h_exec is not None:
             return  # HO execution running, no sync checks
 
-        q_in_pcell = self.q_in[self._pcell]
-        q_out_pcell = self.q_out[self._pcell]
+        q_in_pcell = self.q_in[self.pcell]
+        q_out_pcell = self.q_out[self.pcell]
         if q_in_pcell and self._h_t310 is not None:
             self._in_sync()
         elif q_out_pcell and self._h_t310 is None:
@@ -281,7 +281,7 @@ class ReferenceRRC:
             name="RLF",
         )
         self.state = RrcState.RLF_RECOVERY
-        self._prev_pcell = self._pcell
+        self.prev_pcell = self.pcell
 
     def _rlf_timer_expired(self) -> None:
         self._log("RLF timer expired", logging.INFO, flag="rlf_expire")
@@ -291,7 +291,7 @@ class ReferenceRRC:
     def _recover_from_rlf(self) -> None:
         """RLF timer expired → recover to CONNECTED_NORMAL."""
         self._log("Recovered from RLF", logging.INFO)
-        self._pcell = None
+        self.pcell = None
         self.state = RrcState.RRC_IDLE
         self._trigger("attach")  # simplified for this example
 
@@ -303,38 +303,38 @@ class ReferenceRRC:
         self._measure_a3()
 
     def _measure_a3(self) -> None:
-        if self._pcell is None:
+        if self.pcell is None:
             raise RuntimeError("No primary cell set")
 
         # Find best candidate cell (highest RSRP excluding PCell)
-        neighbor_cell_idxs = np.delete(np.arange(len(self.rsrp)), self._pcell)
-        rsrp_neighbor_cells = np.delete(self.rsrp, self._pcell)
+        neighbor_cell_idxs = np.delete(np.arange(len(self.rsrp)), self.pcell)
+        rsrp_neighbor_cells = np.delete(self.rsrp, self.pcell)
         best_ncell = neighbor_cell_idxs[np.argmax(rsrp_neighbor_cells)]
 
         # Primary cell measurement (RSRP)
-        mp = self.rsrp[self._pcell]
+        mp = self.rsrp[self.pcell]
         # Reporting cell measurement (RSRP), or -inf if None
-        mn = -np.inf if self._report_cell is None else self.rsrp[self._report_cell]
+        mn = -np.inf if self.reporting_cell is None else self.rsrp[self.reporting_cell]
         # Best candidate cell measurement (RSRP)
         mc = self.rsrp[best_ncell]
 
-        if self._report_cell is None:  # No TTT running
+        if self.reporting_cell is None:  # No TTT running
             if mc - self.a3_hyst_db > mp + self.a3_off_db:  # A3 entry condition
-                self._report_cell = best_ncell
+                self.reporting_cell = best_ncell
                 self._trigger("a3_enter")  # Start TTT
         else:  # TTT running
             if mn + self.a3_hyst_db < mp + self.a3_off_db:
                 # A3 exit condition
                 self._trigger("a3_reset")  # Cancel TTT
 
-            if self.enable_ttt_abort and best_ncell != self._report_cell:
+            if self.enable_ttt_abort and best_ncell != self.reporting_cell:
                 if (
                     mc - self.a3_hyst_db > mp + self.a3_off_db
                 ):  # A3 entry condition for new candidate
                     # Switch to new candidate cell
-                    self._log(f"Cell changed {self._report_cell} -> {best_ncell}")
+                    self._log(f"Cell changed {self.reporting_cell} -> {best_ncell}")
                     self._trigger("a3_reset")  # Cancel TTT
-                    self._report_cell = best_ncell
+                    self.reporting_cell = best_ncell
                     self._trigger("a3_enter")  # Re-start TTT
 
     ### TTT timer
@@ -356,7 +356,7 @@ class ReferenceRRC:
         self._log("TTT cancelled", logging.INFO, flag="ttt_cancel")
         self.clock.cancel(self._h_ttt)
         self._h_ttt = None
-        self._report_cell = None
+        self.reporting_cell = None
         # print(f"t={self.clock.now} TTT cancelled, report_cell cleared")
 
     def _ttt_expired(self) -> None:
@@ -369,7 +369,7 @@ class ReferenceRRC:
     def _start_prep(self) -> None:
         if self._h_prep is not None:
             raise RuntimeError("HO preparation already running")
-        if self._report_cell is None:
+        if self.reporting_cell is None:
             raise RuntimeError("No reporting cell for measurement report (HO prep)")
         self._log("HO preparation started", logging.INFO, flag="prep_start")
         self.state = RrcState.CONNECTED_HO_PREP
@@ -386,13 +386,13 @@ class ReferenceRRC:
         self._log("HO preparation cancelled", logging.INFO, flag="prep_cancel")
         self.clock.cancel(self._h_prep)
         self._h_prep = None
-        self._report_cell = None
+        self.reporting_cell = None
         self.state = RrcState.CONNECTED_NORMAL
 
     def _prep_expired(self) -> None:
         if self._h_rlf is not None:
             return  # RLF timer running, prep not relevant
-        if self._report_cell is None:
+        if self.reporting_cell is None:
             raise RuntimeError("No reporting cell for HO preparation")
         self._log("HO preparation expired", logging.INFO, flag="prep_expire")
         if self._h_t310 is not None:  # T310 is running
@@ -421,8 +421,8 @@ class ReferenceRRC:
         if self._h_t310 is not None:
             raise RuntimeError("Cannot start HO execution while T310 is running")
         self._log("HO execution started", logging.INFO, flag="exec_start")
-        self._ho_target_cell = self._report_cell
-        self._report_cell = None
+        self.target_cell = self.reporting_cell
+        self.reporting_cell = None
         self._sync_indicator_cnt = 0
         self.state = RrcState.CONNECTED_HO_EXEC
         self.flag_ho_exec_started = True
@@ -439,16 +439,16 @@ class ReferenceRRC:
         self._log("HO execution cancelled", logging.INFO, flag="exec_cancel")
         self.clock.cancel(self._h_exec)
         self._h_exec = None
-        self._ho_target_cell = None
+        self.target_cell = None
         self.state = RrcState.CONNECTED_NORMAL
 
     def _exec_expired(self) -> None:
-        if self._ho_target_cell is None:
+        if self.target_cell is None:
             raise RuntimeError("No target cell for HO execution")
         if self.sinr is None:
             raise RuntimeError("RRC UE not initialized with PHY measurements")
         self._log("HO execution expired", logging.INFO, flag="exec_expire")
-        if self.q_out[self._ho_target_cell]:  # poor signal on target cell
+        if self.q_out[self.target_cell]:  # poor signal on target cell
             self._trigger("exec_failed")  # HOF/RLF due to poor signal
         else:
             self._h_exec = None
@@ -457,9 +457,9 @@ class ReferenceRRC:
 
     def _finish_exec(self) -> None:
         self._log("HO execution finished")
-        self._prev_pcell = self._pcell
-        self._pcell = self._ho_target_cell
-        self._ho_target_cell = None
+        self.prev_pcell = self.pcell
+        self.pcell = self.target_cell
+        self.target_cell = None
         self.state = RrcState.CONNECTED_NORMAL
 
     def _hof_due_to_oos(self) -> None:
@@ -523,7 +523,7 @@ class ReferenceRRC:
             "t_rlf_remaining_ms": self.t_rlf_remaining_ms,
             "pcell": self.pcell,
             "prev_pcell": self.prev_pcell,
-            "reporting_cell": self._report_cell,
+            "reporting_cell": self.reporting_cell,
             "target_cell": self.target_cell,
             "ttt_active": self.ttt_active,
             "ho_prep_ongoing": self.ho_prep_ongoing,
@@ -538,38 +538,18 @@ class ReferenceRRC:
 
     ### Properties
     @property
-    def pcell(self) -> int | None:
-        """Get the current primary cell."""
-        return self._pcell
-
-    @property
-    def prev_pcell(self) -> int | None:
-        """Get the previous primary cell."""
-        return self._prev_pcell
-
-    @property
-    def reporting_cell(self) -> int | None:
-        """Get the current reporting cell."""
-        return self._report_cell
-
-    @property
-    def target_cell(self) -> int | None:
-        """Get the current hand-over target cell."""
-        return self._ho_target_cell
-
-    @property
     def in_sync(self) -> bool:
         """Check if UE is in sync."""
-        if self._pcell is None:
+        if self.pcell is None:
             raise RuntimeError("No primary cell set")
-        return self.q_in[self._pcell]
+        return self.q_in[self.pcell]
 
     @property
     def out_of_sync(self) -> bool:
         """Check if UE is out of sync."""
-        if self._pcell is None:
+        if self.pcell is None:
             raise RuntimeError("No primary cell set")
-        return self.q_out[self._pcell]
+        return self.q_out[self.pcell]
 
     @property
     def connected(self) -> bool:

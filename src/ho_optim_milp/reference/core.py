@@ -29,6 +29,7 @@ class VirtualClock:
     """Deterministic event queue.  Time is an integer (ms)."""
 
     def __init__(self, tick_ms: int = 10, simulation_time_ms: int = 1_000):
+        """Initialise the virtual clock with a tick resolution and total simulation duration."""
         self.tick_ms = tick_ms  # smallest resolution
         self.simulation_time_ms = simulation_time_ms  # total sim time
         self.n_steps = simulation_time_ms // tick_ms  # total number of steps

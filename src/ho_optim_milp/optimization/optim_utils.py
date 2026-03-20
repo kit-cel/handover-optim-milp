@@ -10,6 +10,7 @@ GPScalar: TypeAlias = gp.Var | gp.MVar
 
 
 def _as_var(x: GPScalar) -> gp.Var:
+    """Extract a scalar ``gp.Var`` from a ``gp.MVar``; raises if the MVar is not size-1."""
     if isinstance(x, gp.MVar):
         if x.size != 1:
             raise ValueError(f"Expected scalar MVar, got size={x.size}")

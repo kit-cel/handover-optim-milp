@@ -16,37 +16,36 @@ class GurobiBaseOptimizer(ABC):
 
     model: gp.Model
     obj: gp.LinExpr | gp.QuadExpr | gp.MLinExpr | gp.MQuadExpr
-    minimize_or_maximize: int
 
+    _data_loaded: bool = False
+    _model_initialized: bool = False
     _variables_added: bool = False
     _constraints_added: bool = False
+    _objective_set: bool = False
+
     _optimal_solution_found: bool = False
     _optimization_finished: bool = False
 
     def __init__(self, config: "OptimConfig") -> None:
         """Initialize the Gurobi base optimizer."""
-        self.debug = config.debug
         self.config = config
         self.rrc_config = config.rrc
 
-    def setup_model(self, name: str | None = None) -> None:
-        """Set up the Gurobi optimization model."""
+    def init_model(self, name: str | None = None) -> None:
+        """Initialize the Gurobi optimization model."""
         name = name if name is not None else "GurobiBaseOptimizerModel"
         self.model = gp.Model(name)
 
-    def optimize(self) -> None:
+    def solve(self) -> None:
         """Run the optimization process."""
+        if self.model is None:
+            raise RuntimeError("Model has not been initialized.")
         if self._variables_added is False:
             raise RuntimeError("Variables have not been added to the model.")
         if self._constraints_added is False:
             raise RuntimeError("Constraints have not been added to the model.")
-        if self.obj is None or self.minimize_or_maximize is None:
+        if self.obj is None:
             raise RuntimeError("Objective function has not been set.")
-
-        if self.debug:
-            self.model.setObjective(0.0, self.minimize_or_maximize)
-        else:
-            self.model.setObjective(self.obj, self.minimize_or_maximize)
 
         self.model.optimize()
 
@@ -54,8 +53,12 @@ class GurobiBaseOptimizer(ABC):
         self._optimization_finished = True
 
     @abstractmethod
-    def load_data(self, data: "EpisodeResult") -> None:
+    def load_data(self, ep_result: "EpisodeResult", ue_idx: int) -> None:
         """Load necessary data for optimization."""
+
+    @abstractmethod
+    def setup_model(self, name: str = "Optimizer") -> None:
+        """Build the MILP model with variables, constraints, and objective."""
 
     @abstractmethod
     def extract_results(self) -> dict[str, np.ndarray]:

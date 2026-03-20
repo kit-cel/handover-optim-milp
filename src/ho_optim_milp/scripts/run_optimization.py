@@ -48,7 +48,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
 
 def main(config: str, dataset: str, ep_idx: int, ue_idx: int, **kwargs) -> int:
     """Run a single simulation instance."""
-    cwd = kwargs.get("cwd", os.getcwd())
+    cwd = kwargs.get("cwd_path", os.getcwd())
     max_steps = kwargs.get("max_steps", 10_000)
 
     path_to_config = os.path.join(cwd, "config", config)
@@ -66,12 +66,11 @@ def main(config: str, dataset: str, ep_idx: int, ue_idx: int, **kwargs) -> int:
     )
     ep_result = sim_results.episode_results[ep_idx]
 
-    milp_solver = HandoverOptimizerMILP(
-        config=cfg,
-        data=ep_result,
-        ue_idx=ue_idx,
-    )
-    milp_solver.optimize()
+    milp_solver = HandoverOptimizerMILP(config=cfg)
+    milp_solver.load_data(ep_result=ep_result, ue_idx=ue_idx)
+    milp_solver.setup_model(name=f"ho_optim_ep{ep_idx}_ue{ue_idx}")
+    milp_solver.apply_warm_start_if_configured()
+    milp_solver.solve()
 
     # if not optimal, return early without logging results (2 is optimal)
     if milp_solver.model.status != 2:
@@ -87,9 +86,7 @@ def main(config: str, dataset: str, ep_idx: int, ue_idx: int, **kwargs) -> int:
     print(f"Results:\n{nested_dict_to_str(result_metrics)}\n")
 
     # Log raw optimization results to CSV
-    full_log_file_name = (
-        f"optim_full_result_ue{ue_idx}_lambda{milp_solver.lambda_r}.csv"
-    )
+    full_log_file_name = f"optim_full_result_ue{ue_idx}_lambda{cfg.lambda_r}.csv"
     milp_solver.log_results_to_csv(
         file_name=full_log_file_name, subfolder=f"ep_{ep_idx:05d}"
     )
@@ -106,7 +103,7 @@ def main(config: str, dataset: str, ep_idx: int, ue_idx: int, **kwargs) -> int:
         "t_rlfr_ms_simulated": cfg.rrc.t_rlfr_ms_simulated,
         "t_mts_ms": cfg.rrc.t_mts_ms,
         "l3_filter_coef": cfg.rrc.l3_filter_coef,
-        "lambda": milp_solver.lambda_r,
+        "lambda": cfg.lambda_r,
     }
 
     ue_cfg = ep_result.config.get("ue", None)
@@ -124,12 +121,12 @@ def main(config: str, dataset: str, ep_idx: int, ue_idx: int, **kwargs) -> int:
             "ue_speed_kph": ue_speed,
         }
     )
-    print(f"Meta:\n{nested_dict_to_str(meta)}\n")
+    print(f"Meta:\n{nested_dict_to_str(meta, float_precision=5)}\n")
 
     # Log UE results metrics to CSV including RRC parameters
     log_dir = os.path.join(cfg.base_dir, "results", "optimization")
     os.makedirs(log_dir, exist_ok=True)
-    log_file_name = f"metrics_ep{ep_idx}_lambda{milp_solver.lambda_r}.csv"
+    log_file_name = f"metrics_ep{ep_idx:05d}_lambda{cfg.lambda_r}.csv"
     full_log_path = os.path.join(log_dir, log_file_name)
 
     # Write UE result metrics to CSV

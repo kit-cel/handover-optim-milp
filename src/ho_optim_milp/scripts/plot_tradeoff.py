@@ -1,4 +1,4 @@
-"""Plot"""
+"""Script to plot the rate-connectivity trade-off."""
 
 import argparse
 

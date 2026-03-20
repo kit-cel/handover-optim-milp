@@ -102,6 +102,7 @@ class MovingAverageFilter:
         return sum_values / self.count
 
     def _lazy_init(self, values: NDArray[np.floating]) -> None:
+        """Init the buffer and accumulator on the first call, using the input shape."""
         self._buf = np.zeros((self._cap, *values.shape), dtype=self._dtype)
         self._sum = np.zeros_like(values, dtype=self._dtype)
         self._shape = values.shape

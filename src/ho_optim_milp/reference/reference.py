@@ -27,6 +27,20 @@ class RRCReferenceSimulation:
         lambda_r: float = 0.0,
         log_full_results: bool = False,
     ) -> None:
+        """Initialise the RRC reference simulation.
+
+        Parameters
+        ----------
+        rrc_config:
+            RRC protocol parameters (timer values, thresholds, etc.).
+        data:
+            Episode data container with RSRP/SINR arrays.
+        lambda_r:
+            Outage penalty weight (not used in reference sim, kept for API parity).
+        log_full_results:
+            When ``True``, write a full per-TTI CSV log alongside the
+            aggregated result buffer.
+        """
         self.rrc_config = rrc_config
         self.data = data
 
@@ -132,6 +146,7 @@ class RRCReferenceSimulation:
         q_in_mat: np.ndarray,
         q_out_mat: np.ndarray,
     ) -> None:
+        """Advance all UEs by one TTI: PHY update → scheduled events → measurement reporting."""
         # 1. PHY update
         if (self.clock.now % self.phy_update_interval_ms) == 0:
             idx = self.clock.now // self.phy_update_interval_ms
@@ -153,6 +168,7 @@ class RRCReferenceSimulation:
                 ue.process_measurements()
 
     def _log_snapshot(self) -> None:
+        """Append per-log-interval UE state flags to the in-memory result buffer."""
         # Log snapshot
         if (self.clock.now % self.log_interval_ms) == 0:
             # Store results in buffer

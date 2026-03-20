@@ -47,6 +47,16 @@ class OptimConfig(BaseConfig):
     def from_yaml(
         cls, path: str | None, simulation_id: str | None = None
     ) -> "OptimConfig":
+        """Load an :class:`OptimConfig` from a YAML file.
+
+        Parameters
+        ----------
+        path:
+            Path to the YAML configuration file.
+        simulation_id:
+            Optional override for the simulation ID.  Raises if the file
+            already contains a non-``None`` simulation ID.
+        """
         if path is None:
             raise ValueError("Path to YAML configuration file must be provided.")
         config_dict = cls._from_yaml(path)
@@ -68,6 +78,7 @@ class OptimConfig(BaseConfig):
 
     @model_validator(mode="after")
     def _set_log_directories(self) -> "OptimConfig":
+        """Create the log directory on disk after the model has been validated."""
         log_dir = os.path.join(self.base_dir, self.log_dir)
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)

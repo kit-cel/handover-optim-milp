@@ -48,6 +48,13 @@ class SimulationResults:
     """Class to load and handle merged simulation results from an HDF5 file."""
 
     def __init__(self, env: Any = None) -> None:
+        """Initialise an empty ``SimulationResults`` container.
+
+        Parameters
+        ----------
+        env:
+            Optional environment object retained for back-reference.
+        """
         self.env = env
 
         self.n_eps_loaded = 0

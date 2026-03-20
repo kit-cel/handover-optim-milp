@@ -109,6 +109,16 @@ class RRCConfig(BaseConfig):
     def from_yaml(
         cls, path: str | None, simulation_id: str | None = None
     ) -> "RRCConfig":
+        """Load an :class:`RRCConfig` from a YAML file.
+
+        Parameters
+        ----------
+        path:
+            Path to the YAML configuration file.
+        simulation_id:
+            Optional override for the simulation ID.  Raises if the file
+            already contains a non-``None`` simulation ID.
+        """
         if path is None:
             raise ValueError("Path to YAML configuration file must be provided.")
         config_dict = cls._from_yaml(path)

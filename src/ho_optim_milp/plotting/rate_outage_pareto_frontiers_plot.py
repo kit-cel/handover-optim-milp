@@ -25,6 +25,7 @@ STYLE_MAP = {
 
 
 def _build_file_path(out_path: str) -> str:
+    """Build the output PNG file path."""
     pct_tag = "q-" + "-".join(f"{q:g}" for q in REF_PERCENTILES)
     full_out_path = os.path.join(
         out_path, f"rate_outage_pareto_frontiers_{pct_tag}.png"
@@ -49,18 +50,21 @@ def _find_point_for_lambda(
 
 
 def _get_color(curve: ut.Curve) -> Any:
+    """Return the line colour for a curve based on its percentile value."""
     pct = float(curve.pct) if curve.pct is not None else None
     style = STYLE_MAP.get(pct, STYLE_MAP["default"])  # type: ignore
     return style["color"]
 
 
 def _get_marker(curve: ut.Curve) -> str:
+    """Return the marker style for a curve based on its percentile value."""
     pct = float(curve.pct) if curve.pct is not None else None
     style = STYLE_MAP.get(pct, STYLE_MAP["default"])  # type: ignore
     return style["marker"]
 
 
 def _annotate_lambdas(ax: Axes, opt_curve: ut.Curve) -> None:
+    """Annotate the optimizer Pareto curve with lambda endpoint labels."""
     p_low = _find_point_for_lambda(opt_curve, 0.1)
     if p_low is not None:
         ax.annotate(

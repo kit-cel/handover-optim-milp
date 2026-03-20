@@ -145,6 +145,7 @@ class ReferenceRRC:
         }
 
     def _trigger(self, event_name: str) -> None:
+        """Look up and invoke the state-machine handler for ``(current_state, event_name)``."""
         key = (self.state, event_name)
         if key not in self._transitions:
             raise RuntimeError(f"Invalid transition: ({self.state}, {event_name})")
@@ -182,9 +183,10 @@ class ReferenceRRC:
         rsrp_dbm = rsrp_dbm.flatten()
         sinr_db = sinr_db.flatten()
         n_bs = rsrp_dbm.shape[0]
-        assert (
+        if not (
             rsrp_dbm.shape == sinr_db.shape == q_in.shape == q_out.shape and n_bs >= 1
-        )
+        ):
+            raise ValueError("Inconsistent input dimensions")
 
         self.rsrp = rsrp_dbm
         self.sinr = sinr_db
@@ -238,6 +240,7 @@ class ReferenceRRC:
 
     ### T310 timer
     def _start_t310(self) -> None:
+        """Schedule the T310 timer; raises if T310 is already running."""
         if self._h_t310 is not None:
             raise RuntimeError("T310 already running")
         self._log("T310 started", logging.INFO, flag="t310_start")
@@ -250,6 +253,10 @@ class ReferenceRRC:
         self._sync_indicator_cnt = 0
 
     def _stop_t310(self) -> None:
+        """
+        Cancel the T310 timer and reset the sync counter; raises if T310 is not
+        running.
+        """
         if self._h_t310 is None:
             raise RuntimeError("T310 not running")
         self._log("T310 stopped", logging.INFO, flag="t310_cancel")
@@ -258,6 +265,7 @@ class ReferenceRRC:
         self._sync_indicator_cnt = 0
 
     def _t310_expired(self) -> None:
+        """Handle T310 expiry: clear the handle and fire the ``t310_expired`` event."""
         self._log("T310 expired", logging.INFO, flag="t310_expire")
         self._h_t310 = None
         self._trigger("t310_expired")
@@ -270,6 +278,10 @@ class ReferenceRRC:
 
     ### RLF timer
     def _start_rlf_timer(self) -> None:
+        """
+        Schedule the RLF recovery timer and transition to ``RLF_RECOVERY``.
+        Raises if already running.
+        """
         if self._h_rlf is not None:
             raise RuntimeError("RLF timer already running")
         self._log("RLF timer started", logging.INFO, flag="rlf_start")
@@ -284,6 +296,9 @@ class ReferenceRRC:
         self.prev_pcell = self.pcell
 
     def _rlf_timer_expired(self) -> None:
+        """
+        Handle RLF timer expiry: clear the handle and fire the ``rlf_expired`` event.
+        """
         self._log("RLF timer expired", logging.INFO, flag="rlf_expire")
         self._h_rlf = None
         self._trigger("rlf_expired")
@@ -303,6 +318,10 @@ class ReferenceRRC:
         self._measure_a3()
 
     def _measure_a3(self) -> None:
+        """
+        Evaluate the A3 event entry/exit conditions and start or cancel the TTT
+        accordingly.
+        """
         if self.pcell is None:
             raise RuntimeError("No primary cell set")
 
@@ -339,6 +358,7 @@ class ReferenceRRC:
 
     ### TTT timer
     def _start_ttt(self) -> None:
+        """Schedule the TTT timer and return if already running."""
         if self._h_ttt is not None:
             return
         self._log("TTT started", logging.INFO, flag="ttt_start")
@@ -348,25 +368,27 @@ class ReferenceRRC:
             priority=Priority.NORMAL,
             name="TTT",
         )
-        # print(f"t={self.clock.now} TTT started for report_cell={self._report_cell}")
 
     def _cancel_ttt(self) -> None:
+        """
+        Cancel the TTT timer and clear ``reporting_cell`` and return if TTT not running.
+        """
         if self._h_ttt is None:
             return
         self._log("TTT cancelled", logging.INFO, flag="ttt_cancel")
         self.clock.cancel(self._h_ttt)
         self._h_ttt = None
         self.reporting_cell = None
-        # print(f"t={self.clock.now} TTT cancelled, report_cell cleared")
 
     def _ttt_expired(self) -> None:
+        """Handle TTT expiry: clear the handle and fire the ``ttt_expired`` event."""
         self._log("TTT expired", logging.INFO, flag="ttt_expire")
         self._h_ttt = None
         self._trigger("ttt_expired")
-        # print(f"t={self.clock.now} TTT expired for report_cell={self._report_cell}")
 
     ### Handover preparation
     def _start_prep(self) -> None:
+        """Transition to ``CONNECTED_HO_PREP`` and schedule the HO preparation timer."""
         if self._h_prep is not None:
             raise RuntimeError("HO preparation already running")
         if self.reporting_cell is None:
@@ -381,6 +403,7 @@ class ReferenceRRC:
         )
 
     def _cancel_prep(self) -> None:
+        """Cancel the HO preparation timer and return to ``CONNECTED_NORMAL``."""
         if self._h_prep is None:
             raise RuntimeError("HO preparation not running")
         self._log("HO preparation cancelled", logging.INFO, flag="prep_cancel")
@@ -390,6 +413,11 @@ class ReferenceRRC:
         self.state = RrcState.CONNECTED_NORMAL
 
     def _prep_expired(self) -> None:
+        """
+        Handle prep timer expiry:
+        fire ``prep_failed`` if T310 is concurrently running,
+        else proceed to ``prep_expired``.
+        """
         if self._h_rlf is not None:
             return  # RLF timer running, prep not relevant
         if self.reporting_cell is None:
@@ -402,12 +430,20 @@ class ReferenceRRC:
             self._trigger("prep_expired")  # proceed to execution
 
     def _hof_due_to_t310_expiry(self) -> None:
+        """
+        Declare HOF when T310 expires during HO preparation.
+        Cancel HO prep and start RLF.
+        """
         self._log("HOF due to T310 expiry")
         self.flag_hof_detected = True
         self._cancel_prep()
         self._start_rlf_timer()
 
     def _hof_due_to_t310(self) -> None:
+        """
+        Declare HOF when prep fails due to concurrent T310.
+        Cancel prep, stop T310, start RLF.
+        """
         self._log("HOF due to T310")
         self.flag_hof_detected = True
         self._cancel_prep()
@@ -416,6 +452,10 @@ class ReferenceRRC:
 
     ### Handover execution
     def _start_exec(self) -> None:
+        """T
+        ransition to ``CONNECTED_HO_EXEC``, latch the target cell, and schedule
+        the exec timer.
+        """
         if self._h_exec is not None:
             raise RuntimeError("HO execution already running")
         if self._h_t310 is not None:
@@ -434,6 +474,7 @@ class ReferenceRRC:
         )
 
     def _cancel_exec(self) -> None:
+        """Cancel the HO execution timer and return to ``CONNECTED_NORMAL``."""
         if self._h_exec is None:
             raise RuntimeError("HO execution not running")
         self._log("HO execution cancelled", logging.INFO, flag="exec_cancel")
@@ -443,6 +484,11 @@ class ReferenceRRC:
         self.state = RrcState.CONNECTED_NORMAL
 
     def _exec_expired(self) -> None:
+        """
+        Handle exec timer expiry:
+        - fire ``exec_failed`` if the target is Q-out
+        - else complete the HO.
+        """
         if self.target_cell is None:
             raise RuntimeError("No target cell for HO execution")
         if self.sinr is None:
@@ -456,6 +502,7 @@ class ReferenceRRC:
             self._trigger("exec_expired")  # complete HO
 
     def _finish_exec(self) -> None:
+        """Commit the PCell change and return to ``CONNECTED_NORMAL``."""
         self._log("HO execution finished")
         self.prev_pcell = self.pcell
         self.pcell = self.target_cell
@@ -463,7 +510,8 @@ class ReferenceRRC:
         self.state = RrcState.CONNECTED_NORMAL
 
     def _hof_due_to_oos(self) -> None:
-        self._log("HOF due to poor signal on target cell")
+        """Declare HOF because the target cell is OOS, cancel HO exec and start RLF."""
+        self._log("HOF due to OOS target cell")
         self._cancel_exec()
         self._start_rlf_timer()
 
@@ -503,6 +551,7 @@ class ReferenceRRC:
         return {k: np.array(v) for k, v in self._flags.items()}
 
     def _ensure_flags(self) -> None:
+        """Extend all flag lists to cover the current time step."""
         length = self.clock.now // self.sync_signal_update_interval_ms + 1
         for _, v in self._flags.items():
             if len(v) < length:

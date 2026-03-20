@@ -88,7 +88,8 @@ class BaseConfig(BaseModel, ABC):
 
     model_config = ConfigDict(extra="forbid")  # Forbid unknown keys
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Render the configuration as a formatted string with a class-name header."""
         lmax = max(
             (len(l) for l in ut.nested_dict_to_list(self.model_dump(), indent=2))
         )
@@ -198,12 +199,14 @@ class BaseConfig(BaseModel, ABC):
 
     @staticmethod
     def _from_yaml(path: str) -> dict[str, Any]:
+        """Open a YAML file and return its contents as a plain Python dict."""
         with open(path, "r", encoding="utf-8") as f:
             return yaml.safe_load(f)
 
     @field_validator("log_level", mode="before")
     @classmethod
     def _normalize_log_level(cls, value: int | str | None) -> int | None:
+        """Coerce a string log-level name (e.g. ``'DEBUG'``) to its integer constant."""
         if value is None:
             return None
         if isinstance(value, int):

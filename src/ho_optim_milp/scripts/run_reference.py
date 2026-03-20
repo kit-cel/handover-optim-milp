@@ -41,7 +41,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
 
 def main(config: str, dataset: str, ep_idx: int, **kwargs) -> int:
     """Run a single simulation instance."""
-    cwd = kwargs.get("cwd", os.getcwd())
+    cwd = kwargs.get("cwd_path", os.getcwd())
     max_steps = kwargs.get("max_steps", 10_000)
 
     path_to_config = os.path.join(cwd, "config", config)

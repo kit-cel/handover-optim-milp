@@ -183,6 +183,7 @@ class SimulationResults:
     def load(
         cls,
         path: str,
+        *,
         max_eps: int | None = None,
         max_steps: int | None = None,
         keys: list[str] | None = None,

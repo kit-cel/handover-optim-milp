@@ -7,7 +7,7 @@ rrc:
   q_out_db: -8
 
   n310: 1
-  n311: 10
+  n311: 1
   t310_ms: 1000
 
   t_ho_prep_ms_simulated: 40

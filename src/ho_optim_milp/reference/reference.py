@@ -206,22 +206,7 @@ class RRCReferenceSimulation:
             out[k] = arr
         return out
 
-    def get_result_metrics(
-        self, aggregated: bool = True
-    ) -> dict[str, Any] | dict[int, dict[str, Any]]:
-        """Compute and return result metrics.
-
-        Parameters
-        ----------
-        aggregated : bool, default True
-            - True: metrics aggregated over all UEs
-            - False: dict keyed by ue index -> per-UE metrics dict
-        """
-        if aggregated:
-            return self._get_result_metrics_aggregated()
-        return self._get_result_metrics_per_ue()
-
-    def _get_result_metrics_aggregated(self) -> dict[str, Any]:
+    def get_aggregated_result_metrics(self) -> dict[str, Any]:
         """Aggregated metrics over all UEs."""
         dt_s = self.simulation_time_ms / 1000.0
         n_total_samples = int(self.n_steps * self.n_ue)
@@ -246,16 +231,16 @@ class RRCReferenceSimulation:
             "num_pp": int(ref_num_pp),
             "pp_per_s": float(ref_pp_per_s),
             "pp_rate": (float(ref_num_pp / ref_n_ho) if ref_n_ho > 0 else float("inf")),
+            "num_rlf": ref_num_rlf,
             "num_hof": ref_num_hof,
             "hof_rate": float(
                 ref_num_hof / (ref_num_hof + ref_n_ho)
                 if (ref_num_hof + ref_n_ho) > 0
                 else 0.0
             ),
-            "num_rlf": ref_num_rlf,
         }
 
-    def _get_result_metrics_per_ue(self) -> dict[int, dict[str, Any]]:
+    def get_per_ue_result_metrics(self) -> dict[int, dict[str, Any]]:
         """Per-UE metrics (dict keyed by UE index)."""
         dt_s = self.simulation_time_ms / 1000.0
 
@@ -291,27 +276,25 @@ class RRCReferenceSimulation:
 
             out[int(ue_idx)] = {
                 "simulation_id": self.rrc_config.simulation_id,
+                "ue_idx": ue_idx,
                 "simulated_time_s": float(dt_s),
                 "simulated_steps": self.n_steps,
-                "ue_index": ue_idx,
-                "ref_mean_capacity": float(np.asarray(ref_c_mean_ue)[ue_idx]),
+                "mean_capacity": float(np.asarray(ref_c_mean_ue)[ue_idx]),
                 "max_mean_capacity": float(np.asarray(max_c_mean_ue)[ue_idx]),
-                "ref_rel_connected_time": float(ref_t_connected_ue[ue_idx])
+                "rel_connected_time": float(ref_t_connected_ue[ue_idx])
                 / float(self.n_steps),
-                "ref_num_ho": ref_n_ho,
-                "ref_ho_per_s": ref_n_ho / dt_s,
-                "ref_num_pp": ref_num_pp,
-                "ref_pp_per_s": float(np.asarray(pp_per_s_ue)[ue_idx]),
-                "ref_pp_rate": (
-                    (ref_num_pp / ref_n_ho) if ref_n_ho > 0 else float("inf")
-                ),
-                "ref_num_hof": ref_num_hof,
-                "ref_hof_rate": (
+                "num_ho": ref_n_ho,
+                "ho_per_s": ref_n_ho / dt_s,
+                "num_pp": ref_num_pp,
+                "pp_per_s": float(np.asarray(pp_per_s_ue)[ue_idx]),
+                "pp_rate": ((ref_num_pp / ref_n_ho) if ref_n_ho > 0 else float("inf")),
+                "num_rlf": int(np.sum(rlf[:, ue_idx])),
+                "num_hof": ref_num_hof,
+                "hof_rate": (
                     ref_num_hof / (ref_num_hof + ref_n_ho)
                     if (ref_num_hof + ref_n_ho) > 0
                     else 0.0
                 ),
-                "ref_num_rlf": int(np.sum(rlf[:, ue_idx])),
             }
 
         return out

@@ -1,43 +1,16 @@
 """Plot average achieved rate-outage Pareto frontiers."""
 
-import argparse
+from argparse import _SubParsersAction as SubParsersAct
 
+from ho_optim_milp.common.subparsers import add_default_plot_parser
 from ho_optim_milp.plotting import plot_pareto_fronts
-from ho_optim_milp.plotting import utils as ut
-
-DATASET_DIR: str = "dataset_root"
 
 
-def add_parser(subparsers: argparse._SubParsersAction, cwd: str) -> None:
+def add_parser(
+    subparsers: SubParsersAct, cwd: str, name: str = "plot_pareto_fronts"
+) -> None:
     """Argument parser for main function."""
-    parser: argparse.ArgumentParser = subparsers.add_parser("plot_pareto_fronts")
-
-    parser.add_argument(
-        "--optim-path",
-        dest="optim_path",
-        default=ut.get_default_optim_result_path(cwd, DATASET_DIR),
-        help="Path to optim_result_metrics.parquet",
-    )
-    parser.add_argument(
-        "--reference-path",
-        dest="reference_path",
-        default=ut.get_default_reference_result_path(cwd, DATASET_DIR),
-        help="Path to reference_result_metrics.parquet",
-    )
-    parser.add_argument(
-        "--out-path",
-        dest="out_path",
-        default=ut.get_default_plot_path(cwd),
-        help="Output path for figures.",
-    )
-    parser.add_argument(
-        "--print-values",
-        dest="print_values",
-        action="store_true",
-        help="Print plotted values to stdout.",
-    )
-
-    parser.set_defaults(func=main)
+    add_default_plot_parser(subparsers, main, cwd, name)
 
 
 def main(optim_path: str, reference_path: str, out_path: str, **kwargs) -> int:

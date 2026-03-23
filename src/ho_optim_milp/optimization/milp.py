@@ -134,11 +134,23 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
             raise RuntimeError("Optimization must finish before extracting results.")
         return self._extractor.extract_results()
 
-    def get_result_metrics(self) -> dict[str, Any]:
+    def get_result_metrics(self) -> dict[int, dict[str, Any]]:
         """Get key optimization metrics in a structured format."""
         if not self._optimization_finished or self._extractor is None:
             raise RuntimeError("Optimization must finish before extracting metrics.")
         return self._extractor.get_result_metrics(obj_value=float(self.obj.getValue()))
+
+    def get_aggregated_result_metrics(self) -> dict[str, Any]:
+        """
+        Get key optimization metrics in a structured format.
+
+        Basically the same as `get_result_metrics` since the MILP only optimizes
+        for a single UE, but provided for consistency with the reference
+        simulation metrics.
+        """
+        if not self._optimization_finished or self._extractor is None:
+            raise RuntimeError("Optimization must finish before extracting metrics.")
+        return self.get_result_metrics()[self.data.ue_idx]
 
     def log_results_to_csv(
         self, file_name: str | None = None, subfolder: str | None = None

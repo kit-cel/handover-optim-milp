@@ -1,7 +1,7 @@
 """Abstract Gurobi base optimizer class."""
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import gurobipy as gp
 import numpy as np
@@ -65,7 +65,7 @@ class GurobiBaseOptimizer(ABC):
         """Retrieve optimization results."""
 
     @abstractmethod
-    def get_result_metrics(self) -> dict[str, float]:
+    def get_result_metrics(self) -> dict[int, dict[str, Any]]:
         """Get the optimization results in a structured format."""
 
     @abstractmethod

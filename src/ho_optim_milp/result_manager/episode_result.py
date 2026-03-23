@@ -68,6 +68,24 @@ class EpisodeResult:
             if f.name not in {"meta_attrs", "meta", "config_common", "config"}
         }
 
+    def extract_ue_speed_kph(self) -> float | None:
+        """Extract UE speed in km/h from metadata if available."""
+        ue_config = self.config.get("ue", None)
+        if ue_config is None:
+            warnings.warn("UE configuration not found in episode config.")
+            return None
+
+        ue_speed = None
+        if isinstance(ue_config, list):
+            if len(ue_config) > 1:
+                raise ValueError("UE config list has more than one entry.")
+            if isinstance(ue_config[0], dict) and "speed_kmh" in ue_config[0]:
+                ue_speed = ue_config[0]["speed_kmh"]
+            else:
+                warnings.warn("UE config list does not contain 'speed_kmh' key.")
+
+        return ue_speed
+
     @classmethod
     def from_dict(
         cls,

@@ -100,7 +100,7 @@ class ResultExtractor:
             "i_rlf_running": self._rlf_running,
         }
 
-    def get_result_metrics(self, obj_value: float) -> dict[str, Any]:
+    def get_result_metrics(self, obj_value: float) -> dict[int, dict[str, Any]]:
         """Compute and return scalar performance metrics.
 
         Parameters
@@ -115,7 +115,8 @@ class ResultExtractor:
         num_ho = int(np.sum(self._ho_exec_end))
         num_pp, pp_per_s = self._get_num_pp()
 
-        return {
+        out: dict[int, dict[str, Any]] = {}
+        out[int(self._data.ue_idx)] = {
             "simulation_id": self._simulation_id,
             "ue_idx": self._data.ue_idx,
             "simulated_time_s": dt_s,
@@ -131,6 +132,7 @@ class ResultExtractor:
             "num_rlf": int(np.sum(self._rlf_start)),
             "ho_objective_value": obj_value,
         }
+        return out
 
     def log_results_to_csv(
         self, file_name: str | None = None, subfolder: str | None = None

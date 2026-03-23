@@ -44,11 +44,11 @@ def _read_json_dataset(group: h5py.Group, name: str) -> Any:
     return json.loads(raw)
 
 
-class SimulationResults:
+class NetworkSimulationResult:
     """Class to load and handle merged simulation results from an HDF5 file."""
 
     def __init__(self, env: Any = None) -> None:
-        """Initialise an empty ``SimulationResults`` container.
+        """Initialise an empty ``NetworkSimulationResult`` container.
 
         Parameters
         ----------
@@ -66,6 +66,17 @@ class SimulationResults:
 
         self._file_path: str | None = None
         self._file_info: dict[str, Any] | None = None
+
+    def get_ep_result_by_idx(self, ep_idx: int) -> EpisodeResult:
+        """Return episode result by episode index."""
+        if not self.episode_results:
+            raise ValueError("No episodes loaded")
+        if len(self.episode_results) <= ep_idx:
+            raise IndexError(
+                f"Requested episode index {ep_idx} exceeds loaded "
+                f"episodes (n={len(self.episode_results)})"
+            )
+        return self.episode_results[ep_idx]
 
     @staticmethod
     def _episode_names(f: h5py.File) -> list[str]:
@@ -196,7 +207,7 @@ class SimulationResults:
         keys: list[str] | None = None,
         validate_data: bool = False,
         strict: bool = True,
-    ) -> "SimulationResults":
+    ) -> "NetworkSimulationResult":
         """
         Load results from a HDF5 file.
 
@@ -364,7 +375,7 @@ class SimulationResults:
 
 if __name__ == "__main__":
     # Example usage
-    results = SimulationResults.load(
+    results = NetworkSimulationResult.load(
         path="dataset_root/network_data/network_results.h5",
         max_eps=2,
         max_steps=500,

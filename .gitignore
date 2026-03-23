@@ -226,3 +226,6 @@ logs
 
 # Slurm files
 *.slurm
+
+# Wandb files
+wandb/

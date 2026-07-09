@@ -36,7 +36,7 @@ You are now ready to use the handover-optim-milp framework for your projects.
 
 ## Getting Started
 ### **Get the Dataset**
-Download the corresponding dataset at [IEEE Dataport](https://ieee-dataport.org/) and place it in the `handover-optim-milp` directory.
+Download the corresponding dataset at [https://ieee-dataport.org/](https://dx.doi.org/10.21227/9zk6-vb30) and place it in the `handover-optim-milp` directory.
 
 Note regarding the availability of the dataset:
 Please note that due to the size of the dataset and the individual results, it is not possible to make the data available in this repository.
@@ -70,16 +70,16 @@ You can plot the results stored in the dataset and reproduce the figures in [1] 
 ## Citation [1]
 If you use the **handover-optim-milp** framework in your work, please cite our paper:
 ```
-@article{VoigtRost_MILPbasedOpimalHandover_2026,
-  title = {{MILP}-based {Optimal} {Handover} {Decisions}: A {Benchmark} for {Mobility} {Management} {Algorithms}},
-  author = {Voigt, Johannes and Rost, Peter M.},
-  year = {2026},
-  journal = {IEEE Communications Letters},
-  pages = {},
-  volume = {},
-  number = {},
-  doi = {}
-}
+@article{11554293,
+  author={Voigt, Johannes and Rost, Peter M.},
+  journal={IEEE Communications Letters}, 
+  title={{MILP-Based Optimal Handover Decisions: A Benchmark for Mobility Management Algorithms}},
+  year={2026},
+  volume={30},
+  number={},
+  pages={2193-2197},
+  keywords={Optimization;Radio access networks;Regional area networks;Timing;Cells (biology);Modeling;Handover;Joining processes;3GPP;Interrupters;Handover;mixed-integer linear programming;mobility management;mobile network optimization},
+  doi={10.1109/LCOMM.2026.3701321}}
 ```
 
 ## **License**

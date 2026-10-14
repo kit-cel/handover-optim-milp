@@ -70,16 +70,16 @@ You can plot the results stored in the dataset and reproduce the figures in [1] 
 ## Citation [1]
 If you use the **handover-optim-milp** framework in your work, please cite our paper:
 ```
-@article{11554293,
+@ARTICLE{11554293,
   author={Voigt, Johannes and Rost, Peter M.},
   journal={IEEE Communications Letters}, 
-  title={{MILP-Based Optimal Handover Decisions: A Benchmark for Mobility Management Algorithms}},
+  title={{MILP}-Based Optimal Handover Decisions: A Benchmark for Mobility Management Algorithms}, 
   year={2026},
   volume={30},
   number={},
   pages={2193-2197},
-  keywords={Optimization;Radio access networks;Regional area networks;Timing;Cells (biology);Modeling;Handover;Joining processes;3GPP;Interrupters;Handover;mixed-integer linear programming;mobility management;mobile network optimization},
   doi={10.1109/LCOMM.2026.3701321}}
+
 ```
 
 ## **License**

@@ -68,7 +68,7 @@ def add_default_simulation_parser(
     parser.add_argument(
         "-d",
         "--dataset",
-        default="network_results.h5",
+        default="network_simulation_results_060kph_10eps.h5",
         dest="dataset",
         help="Name of the Dataset.",
     )
@@ -135,7 +135,7 @@ def add_default_sweep_parser(
     parser.add_argument(
         "-d",
         "--dataset",
-        default="network_results.h5",
+        default="network_simulation_results_060kph_10eps.h5",
         dest="dataset",
         help="Name of the Dataset.",
     )

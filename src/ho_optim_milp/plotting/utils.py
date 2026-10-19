@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-
 # Optimization columns
 OPT_LAMBDA_COL = "lambda"
 OPT_X_COL = "rel_connected_time"
@@ -35,7 +34,7 @@ class Curve:
 def get_default_optim_result_path(cwd: str, dataset_dir: str) -> str:
     """Return default optimization metrics Parquet path."""
     optim_path = os.path.join(
-        cwd, dataset_dir, "optim_results", "optim_result_metrics.parquet"
+        cwd, dataset_dir, "milp_results", "optim_results_metrics_060kph_10eps.parquet"
     )
     if not os.path.isfile(optim_path):
         raise ValueError(f"File '{optim_path}' does not exist.")
@@ -45,7 +44,10 @@ def get_default_optim_result_path(cwd: str, dataset_dir: str) -> str:
 def get_default_reference_result_path(cwd: str, dataset_dir: str) -> str:
     """Return default reference metrics Parquet path."""
     ref_path = os.path.join(
-        cwd, dataset_dir, "reference_results", "reference_result_metrics.parquet"
+        cwd,
+        dataset_dir,
+        "reference_results",
+        "reference_results_metrics_060kph_10eps.parquet",
     )
     if not os.path.isfile(ref_path):
         raise ValueError(f"File '{ref_path}' does not exist.")

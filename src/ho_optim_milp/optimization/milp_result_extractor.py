@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from .milp import ProblemData, RRCConstants
 
 
+def _binary_solution(values: Any) -> np.ndarray:
+    """Convert solver binary values to exact zero-one flags."""
+    return (np.asarray(values, dtype=float) >= 0.5).astype(np.int8)
+
+
+def _integer_solution(values: Any) -> np.ndarray:
+    """Round solver integer values before converting to integers."""
+    return np.rint(np.asarray(values, dtype=float)).astype(np.int64)
+
+
 class ResultExtractor:
     """Extracts, computes, and logs results from a solved MILP model.
 
@@ -62,21 +72,21 @@ class ResultExtractor:
 
         v = model_vars
         self._pcells: np.ndarray = np.argmax(v.x_bs.X, axis=0)
-        self._i_q_in: np.ndarray = np.asarray(v.i_q_in.X)
-        self._i_q_out: np.ndarray = np.asarray(v.i_q_out.X)
-        self._n310_u_raw: np.ndarray = np.asarray(v.n310.u_raw.X)
-        self._n310_cnt: np.ndarray = np.asarray(v.n310.cnt.X)
-        self._n311_u_raw: np.ndarray = np.asarray(v.n311.u_raw.X)
-        self._n311_cnt: np.ndarray = np.asarray(v.n311.cnt.X)
-        self._t310_start: np.ndarray = np.asarray(v.t310.start.X)
-        self._t310_stop: np.ndarray = np.asarray(v.t310.stop.X)
-        self._t310_tau: np.ndarray = np.asarray(v.t310.tau.X)
-        self._t310_tau_eq_1: np.ndarray = np.asarray(v.t310.tau_eq_1.X)
-        self._t310_active: np.ndarray = np.asarray(v.t310.active.X)
-        self._rlf_start: np.ndarray = np.asarray(v.rlf.start.X)
-        self._rlf_running: np.ndarray = np.asarray(v.rlf.running.X)
-        self._ho_exec_end: np.ndarray = np.asarray(v.ho.exec_end.X)
-        self._ho_exec_running: np.ndarray = np.asarray(v.ho.exec_running.X)
+        self._i_q_in: np.ndarray = _binary_solution(v.i_q_in.X)
+        self._i_q_out: np.ndarray = _binary_solution(v.i_q_out.X)
+        self._n310_u_raw: np.ndarray = _integer_solution(v.n310.u_raw.X)
+        self._n310_cnt: np.ndarray = _integer_solution(v.n310.cnt.X)
+        self._n311_u_raw: np.ndarray = _integer_solution(v.n311.u_raw.X)
+        self._n311_cnt: np.ndarray = _integer_solution(v.n311.cnt.X)
+        self._t310_start: np.ndarray = _binary_solution(v.t310.start.X)
+        self._t310_stop: np.ndarray = _binary_solution(v.t310.stop.X)
+        self._t310_tau: np.ndarray = _integer_solution(v.t310.tau.X)
+        self._t310_tau_eq_1: np.ndarray = _binary_solution(v.t310.tau_eq_1.X)
+        self._t310_active: np.ndarray = _binary_solution(v.t310.active.X)
+        self._rlf_start: np.ndarray = _binary_solution(v.rlf.start.X)
+        self._rlf_running: np.ndarray = _binary_solution(v.rlf.running.X)
+        self._ho_exec_end: np.ndarray = _binary_solution(v.ho.exec_end.X)
+        self._ho_exec_running: np.ndarray = _binary_solution(v.ho.exec_running.X)
 
     def extract_results(self) -> dict[str, np.ndarray]:
         """Return a flat dict of all key solution arrays."""
@@ -128,7 +138,7 @@ class ResultExtractor:
             "ho_per_s": num_ho / dt_s,
             "num_pp": num_pp,
             "pp_per_s": pp_per_s,
-            "pp_rate": num_pp / num_ho if num_ho > 0 else float("inf"),
+            "pp_rate": num_pp / num_ho if num_ho > 0 else float("nan"),
             "num_rlf": int(np.sum(self._rlf_start)),
             "ho_objective_value": obj_value,
         }
@@ -197,7 +207,7 @@ class ResultExtractor:
         t_ho_end = np.where(self._ho_exec_end > 0.5)[0]
         num_pp = 0
         for t_ho1, t_ho2 in zip(t_ho_end[:-1], t_ho_end[1:]):
-            if t_ho2 - t_ho1 <= self._rrc_consts.t_mts:
+            if t_ho1 > 0 and t_ho2 - t_ho1 <= self._rrc_consts.t_mts:
                 if self._pcells[t_ho1 - 1] == self._pcells[t_ho2]:
                     num_pp += 1
         dt_s = self._data.n_steps * self._rrc_consts.t_res_ms / 1_000

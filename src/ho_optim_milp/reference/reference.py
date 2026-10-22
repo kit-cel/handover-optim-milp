@@ -230,7 +230,7 @@ class RRCReferenceSimulation:
             "ho_per_s": float(ref_n_ho / dt_s),
             "num_pp": int(ref_num_pp),
             "pp_per_s": float(ref_pp_per_s),
-            "pp_rate": (float(ref_num_pp / ref_n_ho) if ref_n_ho > 0 else float("inf")),
+            "pp_rate": (float(ref_num_pp / ref_n_ho) if ref_n_ho > 0 else float("nan")),
             "num_rlf": ref_num_rlf,
             "num_hof": ref_num_hof,
             "hof_rate": float(
@@ -287,7 +287,7 @@ class RRCReferenceSimulation:
                 "ho_per_s": ref_n_ho / dt_s,
                 "num_pp": ref_num_pp,
                 "pp_per_s": float(np.asarray(pp_per_s_ue)[ue_idx]),
-                "pp_rate": ((ref_num_pp / ref_n_ho) if ref_n_ho > 0 else float("inf")),
+                "pp_rate": ((ref_num_pp / ref_n_ho) if ref_n_ho > 0 else float("nan")),
                 "num_rlf": int(np.sum(rlf[:, ue_idx])),
                 "num_hof": ref_num_hof,
                 "hof_rate": (

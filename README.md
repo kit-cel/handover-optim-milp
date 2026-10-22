@@ -3,8 +3,13 @@
 # MILP-based Optimal Handover Decisions: A Benchmark for Mobility Management Algorithms [1]
 
 ## Description
-MILP benchmark for UE RRC handover optimization.
-Provides a fully linearized (pure MILP) formulation of handover state machines (N310/N311/T310/RLF), enabling reproducible optimization and benchmarking against simulation traces.
+This repository accompanies the paper *MILP-Based Optimal Handover Decisions: A Benchmark for Mobility Management Algorithms* [1]. It optimizes serving-cell assignments for recorded network trajectories using a mixed-integer linear program (MILP). The objective balances average achieved rate against time spent disconnected, producing a rate-outage Pareto frontier across different trade-off weights.
+
+The formulation includes handover execution and key radio resource control (RRC) mechanisms: N310/N311 counters, the T310 timer, and radio link failure (RLF) recovery. An A3 event-based reference simulation provides a baseline for comparing handover policies on the same trajectories. The [published IEEE DataPort dataset](https://dx.doi.org/10.21227/9zk6-vb30) contains the network measurements, MILP decisions, and reference results used in the paper; the commands below run individual cases and recreate the comparison plots.
+
+The figure shows the rate-outage trade-off for the published 60 km/h trajectories, including the MILP frontier and A3 reference curves for three quantile selections.
+
+![Rate-outage Pareto frontiers for the MILP benchmark and A3 reference](assets/rate_outage_pareto_frontiers_q-90-95-99.png)
 
 ---
 
@@ -36,11 +41,9 @@ You are now ready to use the handover-optim-milp framework for your projects.
 
 ## Getting Started
 ### **Get the Dataset**
-Download the corresponding dataset at [https://ieee-dataport.org/](https://dx.doi.org/10.21227/9zk6-vb30) and place it in the `handover-optim-milp` directory.
+Download the [published dataset](https://dx.doi.org/10.21227/9zk6-vb30) and extract the archive into the repository directory. The resulting `dataset_root/` directory must contain `network_data/`, `milp_results/`, and `reference_results/`.
 
-Note regarding the availability of the dataset:
-Please note that due to the size of the dataset and the individual results, it is not possible to make the data available in this repository.
-Upon acceptance and/or publication of the associated paper, the relevant datasets and detailed optimization results (per-UE results) will be **published on IEEE Dataport** to provide access via a persistent link (DOI).
+The dataset and detailed per-UE results are hosted on IEEE DataPort rather than in this repository because of their size. Results generated with this release may differ from stored per-step binary flags and handover counts where the original export truncated solver values just below an integer.
 
 ### Run the MILP Optimization and the RRC Reference Simulation
 1. **Run the optimization**:

@@ -168,9 +168,8 @@ def plot_pareto_fronts(
 
     ax.set_xlim(1.0, 5.25)
     ax.set_ylim(5.68, 5.86)
-    ax.invert_xaxis()
 
-    ax.legend(loc="upper left", fontsize=9, frameon=True, facecolor="white")
+    ax.legend(loc="upper right", fontsize=9, frameon=True, facecolor="white")
 
     if print_values:
         _print_curve_values("Optimization", opt_curve)

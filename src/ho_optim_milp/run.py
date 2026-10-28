@@ -26,6 +26,9 @@ from ho_optim_milp.scripts import (
     sweep_init,
     sweep_optimization,
     sweep_reference,
+    build_dataset,
+    generate_network_data,
+    validate_dataset,
 )
 
 
@@ -51,6 +54,9 @@ def main() -> int:
     sweep_init.add_parser(subparsers)
     sweep_optimization.add_parser(subparsers)
     sweep_reference.add_parser(subparsers)
+    build_dataset.add_parser(subparsers)
+    generate_network_data.add_parser(subparsers)
+    validate_dataset.add_parser(subparsers)
 
     if len(sys.argv) == 1:
         parser.print_help()

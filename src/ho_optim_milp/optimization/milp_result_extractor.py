@@ -87,6 +87,31 @@ class ResultExtractor:
         self._rlf_running: np.ndarray = _binary_solution(v.rlf.running.X)
         self._ho_exec_end: np.ndarray = _binary_solution(v.ho.exec_end.X)
         self._ho_exec_running: np.ndarray = _binary_solution(v.ho.exec_running.X)
+        self._additional_results: dict[str, np.ndarray] = {
+            "x_bs": _binary_solution(v.x_bs.X),
+            "u_n310_sat": _integer_solution(v.n310.u_sat.X),
+            "i_n310": _binary_solution(v.n310.ind.X),
+            "n310_b_reset": _binary_solution(v.n310.b_reset.X),
+            "n310_b_q": _binary_solution(v.n310.b_q.X),
+            "n310_b_c": _binary_solution(v.n310.b_c.X),
+            "u_n311_sat": _integer_solution(v.n311.u_sat.X),
+            "i_n311": _binary_solution(v.n311.ind.X),
+            "n311_b_reset": _binary_solution(v.n311.b_reset.X),
+            "n311_b_q": _binary_solution(v.n311.b_q.X),
+            "n311_b_c": _binary_solution(v.n311.b_c.X),
+            "i_t310_cancel_due_to_n311": _binary_solution(v.t310.cancel_due_to_n311.X),
+            "i_t310_expiry": _binary_solution(v.t310.expiry.X),
+            "i_t310_b_mode_rlf": _binary_solution(v.t310.b_mode_rlf.X),
+            "i_t310_b_mode_start": _binary_solution(v.t310.b_mode_start.X),
+            "i_t310_b_mode_stop": _binary_solution(v.t310.b_mode_stop.X),
+            "i_t310_b_mode_decr": _binary_solution(v.t310.b_mode_decr.X),
+            "i_rlf_in_last_t_ho_steps": _binary_solution(v.rlf.in_last_t_ho_steps.X),
+            "i_ho_same_cell": _binary_solution(v.ho.same_cell.X),
+            "i_ho_cell_change": _binary_solution(v.ho.cell_change.X),
+            "i_rate_conn_aux": _binary_solution(v.rate.conn_aux.X),
+            "s_rate": np.asarray(v.rate.s_rate.X, dtype=float),
+            "r_rate": np.asarray(v.rate.r_rate.X, dtype=float),
+        }
 
     def extract_results(self) -> dict[str, np.ndarray]:
         """Return a flat dict of all key solution arrays."""
@@ -103,11 +128,13 @@ class ResultExtractor:
             "i_t310_start": self._t310_start,
             "i_t310_stop": self._t310_stop,
             "tau_t310_rem": self._t310_tau,
+            "i_t310_eq_1": self._t310_tau_eq_1,
             "i_rlf_start": self._rlf_start,
             "i_ho_exec_end": self._ho_exec_end,
             "i_ho_exec_running": self._ho_exec_running,
             "i_t310_active": self._t310_active,
             "i_rlf_running": self._rlf_running,
+            **self._additional_results,
         }
 
     def get_result_metrics(self, obj_value: float) -> dict[int, dict[str, Any]]:
@@ -220,7 +247,7 @@ class ResultExtractor:
                 f"time_step {time_step} is out of bounds [0, {self._data.n_steps})."
             )
         t = time_step
-        return {
+        snapshot = {
             "time_step": t,
             "ue_idx": self._data.ue_idx,
             "pcell": int(self._pcells[t]),
@@ -242,3 +269,7 @@ class ResultExtractor:
             "sinr_db": self._data.sinr_db[:, t].tolist(),
             "capacity": self._data.capacity[:, t].tolist(),
         }
+        for name, values in self._additional_results.items():
+            value = values[:, t] if values.ndim == 2 else values[t]
+            snapshot[name] = value.tolist() if values.ndim == 2 else value.item()
+        return snapshot

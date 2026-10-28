@@ -12,6 +12,7 @@ import numpy as np
 from .base_optimizer import GurobiBaseOptimizer
 from . import milp_variables as milp_vars
 from .milp_constraints import MILPConstraintBuilder
+from .milp_constraints_current import MILPConstraintBuilder as CurrentConstraintBuilder
 from .milp_dataclasses import (
     ConstraintContext,
     ProblemData,
@@ -20,6 +21,7 @@ from .milp_dataclasses import (
 )
 from .milp_result_extractor import ResultExtractor
 from ..dataloader.preprocessing import preprocess_dataset
+from ..dataloader.cell_ranking import rank1_neighbor_table
 from ..reference.reference import RRCReferenceSimulation
 
 if TYPE_CHECKING:
@@ -60,14 +62,24 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
         )
 
         # Warm start/safe candidate pruning configuration
-        self.warm_start_config = warm_start_config or WarmStartConfig()
+        configured_warm_start = config.warm_start
+        self.warm_start_config = warm_start_config or WarmStartConfig(
+            enabled=configured_warm_start.enabled,
+            candidate_k=configured_warm_start.candidate_k,
+            candidate_delta_db=configured_warm_start.candidate_delta_db,
+            candidate_metric=configured_warm_start.candidate_metric,
+            candidate_include_prev=configured_warm_start.candidate_include_prev,
+            safe_pruning_time_limit_s=configured_warm_start.safe_pruning_time_limit_s,
+            safe_pruning_mip_gap=configured_warm_start.safe_pruning_mip_gap,
+        )
         self._extractor = None
 
     def load_data(self, ep_result: "EpisodeResult", ue_idx: int) -> None:
         """Data loading."""
         self.ep_result = ep_result
+        use_l3 = self.config.model_profile == "paper_v1"
         rsrp_dbm, sinr_db, q_in_mat, q_out_mat = preprocess_dataset(
-            ep_result, self.rrc_config, use_l3_filtering=True, ue_no=ue_idx
+            ep_result, self.rrc_config, use_l3_filtering=use_l3, ue_no=ue_idx
         )
 
         n_bs, n_steps = sinr_db.shape
@@ -79,6 +91,11 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
             sinr_db=sinr_db,
             q_in_mat=q_in_mat,
             q_out_mat=q_out_mat,
+            rank1_neighbor=(
+                rank1_neighbor_table(rsrp_dbm)
+                if self.config.handover_target_mode == "rank1_neighbor"
+                else None
+            ),
         )
 
         self._data_loaded = True
@@ -90,7 +107,16 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
 
         # Build final, unpruned model -> optimality preserved regardless of warm start
         self.init_model(name=name)
-        self.model.setParam("Threads", multiprocessing.cpu_count())
+        self.model.setParam(
+            "Threads",
+            self.config.gurobi.threads or multiprocessing.cpu_count(),
+        )
+        if self.config.gurobi.time_limit_s is not None:
+            self.model.setParam("TimeLimit", self.config.gurobi.time_limit_s)
+        if self.config.gurobi.mip_gap is not None:
+            self.model.setParam("MIPGap", self.config.gurobi.mip_gap)
+        if not self.config.gurobi.log_to_console:
+            self.model.setParam("OutputFlag", 0)
 
         self._add_variables()
         self._add_constraints()
@@ -98,6 +124,8 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
 
     def apply_warm_start_if_configured(self) -> None:
         """Apply warm start if it was computed during initialization."""
+        if not self.warm_start_config.enabled:
+            return
         if self.ep_result is None:
             raise RuntimeError("Data must be loaded before applying warm start.")
         if not self._variables_added:
@@ -174,7 +202,20 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
             ref_results=self._get_reference_result(),
         )
 
-        cs_builder = MILPConstraintBuilder(ctx)
+        if self.config.model_profile == "current":
+            ctx = ConstraintContext(
+                model=self.model,
+                vars=self.vars,
+                data=self.data,
+                consts=self.rrc_consts,
+                debug=None,
+                ref_results=None,
+                initial_access=self.config.initial_access,
+                handover_target_mode=self.config.handover_target_mode,
+            )
+            cs_builder = CurrentConstraintBuilder(ctx)
+        else:
+            cs_builder = MILPConstraintBuilder(ctx)
 
         cs_builder.add_constraints()
         self._constraints_added = cs_builder.constraints_added
@@ -364,10 +405,18 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
         if not self._constraints_added:
             raise RuntimeError("Constraints must be added before setting objective.")
 
-        obj_rate = self.vars.rate.r_rate.sum() / self.data.n_steps
-        obj_out = (
-            self.vars.ho.exec_running.sum() + self.vars.rlf.running.sum()
-        ) / self.data.n_steps
+        if self.config.model_profile == "current":
+            weights = self.config.discount_gamma ** np.arange(self.data.n_steps)
+            scale = float(weights.sum())
+            obj_rate = (weights * self.vars.rate.r_rate).sum() / scale
+            obj_out = (
+                weights * (self.vars.ho.exec_running + self.vars.rlf.running)
+            ).sum() / scale
+        else:
+            obj_rate = self.vars.rate.r_rate.sum() / self.data.n_steps
+            obj_out = (
+                self.vars.ho.exec_running.sum() + self.vars.rlf.running.sum()
+            ) / self.data.n_steps
         self.obj = obj_rate - self.config.lambda_r * obj_out
 
         if self.config.debug:

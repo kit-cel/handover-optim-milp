@@ -103,6 +103,7 @@ def plot_pareto_fronts(
     out_path: str,
     print_values: bool = False,
     annotate_lambdas: bool = True,
+    auto_limits: bool = False,
 ) -> None:
     """Create Pareto scatter plot matching the target paper style."""
     opt_curve = ut.load_optimization_curve(optim_path)
@@ -166,8 +167,9 @@ def plot_pareto_fronts(
     ax.tick_params(labelsize=9)
     ax.grid(True, which="major", linewidth=0.5, alpha=0.6)
 
-    ax.set_xlim(1.0, 5.25)
-    ax.set_ylim(5.68, 5.86)
+    if not auto_limits:
+        ax.set_xlim(1.0, 5.25)
+        ax.set_ylim(5.68, 5.86)
 
     ax.legend(loc="upper right", fontsize=9, frameon=True, facecolor="white")
 

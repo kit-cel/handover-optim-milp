@@ -19,6 +19,7 @@ class ProblemData:
     sinr_db: np.ndarray
     q_in_mat: np.ndarray
     q_out_mat: np.ndarray
+    rank1_neighbor: np.ndarray | None = None
 
     @property
     def capacity(self) -> np.ndarray:
@@ -55,6 +56,7 @@ class RRCConstants:
 class WarmStartConfig:
     """Configuration for safe candidate pruning warm start."""
 
+    enabled: bool = False
     candidate_k: int = 0
     candidate_delta_db: float = 0.0
     candidate_metric: str = "sinr"
@@ -74,3 +76,5 @@ class ConstraintContext:
     consts: RRCConstants
     debug: bool | None
     ref_results: dict[str, np.ndarray] | None
+    initial_access: str = "free"
+    handover_target_mode: str = "free"

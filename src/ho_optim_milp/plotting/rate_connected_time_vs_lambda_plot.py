@@ -30,6 +30,7 @@ def plot_rate_connectivity_tradeoff(
     reference_path: str,
     out_path: str,
     print_values: bool = True,
+    auto_limits: bool = False,
 ) -> None:
     """Create tradeoff plot matching the target paper style."""
     opt_curve = ut.load_optimization_curve(optim_path)
@@ -103,12 +104,14 @@ def plot_rate_connectivity_tradeoff(
         )[0]
     )
 
-    ax_left.set_xscale("log")
-
-    ax_left.set_xlim(XLIM)
-    ax_left.set_ylim(YLIM_L_RATE)
-    ax_right.set_ylim(YLIM_R_CONN)
-    ax_right.set_yticks(YTICKS_R)
+    if not auto_limits:
+        ax_left.set_xscale("log")
+        ax_left.set_xlim(XLIM)
+        ax_left.set_ylim(YLIM_L_RATE)
+        ax_right.set_ylim(YLIM_R_CONN)
+        ax_right.set_yticks(YTICKS_R)
+    elif (opt_curve.lam > 0).all() and opt_curve.lam.size > 1:
+        ax_left.set_xscale("log")
 
     ax_left.set_xlabel(r"$\lambda$", fontsize=10)
     ax_left.set_ylabel("Average achieved rate (bit/s/Hz)", fontsize=10)

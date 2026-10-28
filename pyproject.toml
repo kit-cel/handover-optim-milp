@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ho_optim_milp"
-version = "1.0.0"
+version = "1.1.0.dev0"
 description = "Framework for handover optimization using mixed-integer linear programming."
 authors = [
     { name = "Johannes Voigt", email = "johannes.voigt@kit.edu" }
@@ -18,6 +18,10 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dynamic = ["dependencies"]
+
+[project.optional-dependencies]
+simulator = ["mobile-network-sim>=0.2,<0.3"]
+test = ["pytest>=9,<10", "pytest-cov>=6,<8"]
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
@@ -33,3 +37,6 @@ ho-optim = "ho_optim_milp.run:main"
 
 [project.urls]
 Repository = "https://github.com/kit-cel/handover-optim-milp"
+
+[tool.pytest.ini_options]
+markers = ["paper_dataset: requires the published dataset and a Gurobi licence"]

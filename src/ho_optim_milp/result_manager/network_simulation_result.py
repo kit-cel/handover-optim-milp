@@ -44,6 +44,24 @@ def _read_json_dataset(group: h5py.Group, name: str) -> Any:
     return json.loads(raw)
 
 
+def _included_keys(f: h5py.File, meta: h5py.Group) -> list[str]:
+    """Read the paper schema or infer fields from a versioned dataset episode."""
+    if "included_keys" in meta:
+        keys = _read_json_dataset(meta, "included_keys")
+        if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
+            raise TypeError('"meta/included_keys" must decode to a list of strings')
+        return keys
+    if "release" not in meta:
+        raise ValueError('Expected "meta/included_keys" or "meta/release"')
+    episodes = sorted(name for name in f if name.startswith("ep_"))
+    if not episodes:
+        raise ValueError("No episode groups found")
+    first = f[episodes[0]]
+    if not isinstance(first, h5py.Group):
+        raise TypeError(f'"{episodes[0]}" is not an HDF5 group')
+    return sorted(key for key, obj in first.items() if isinstance(obj, h5py.Dataset))
+
+
 class NetworkSimulationResult:
     """Class to load and handle merged simulation results from an HDF5 file."""
 
@@ -121,11 +139,8 @@ class NetworkSimulationResult:
 
                 if "config_common" not in meta:
                     raise ValueError('Missing dataset "meta/config_common"')
-                if "included_keys" not in meta:
-                    raise ValueError('Missing dataset "meta/included_keys"')
-
                 config_common = _read_json_dataset(meta, "config_common")
-                included_keys = _read_json_dataset(meta, "included_keys")
+                included_keys = _included_keys(f, meta)
 
                 if not isinstance(config_common, dict):
                     raise TypeError('"meta/config_common" must decode to dict')
@@ -247,7 +262,7 @@ class NetworkSimulationResult:
 
             instance.meta_attrs = _group_attrs_to_dict(meta)
             instance.config_common = _read_json_dataset(meta, "config_common")
-            instance.included_keys = _read_json_dataset(meta, "included_keys")
+            instance.included_keys = _included_keys(f, meta)
 
             if not isinstance(instance.config_common, dict):
                 raise TypeError('"meta/config_common" must decode to dict')
@@ -342,6 +357,7 @@ class NetworkSimulationResult:
                         episode_data,
                         meta_attrs=ep_meta_attrs,
                         meta=ep_meta,
+                        config_common=instance.config_common,
                         strict=False,
                     )
                 )

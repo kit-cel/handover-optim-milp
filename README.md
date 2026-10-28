@@ -1,4 +1,5 @@
 ![Pylint](https://img.shields.io/endpoint?url=https://kit-cel.github.io/handover-optim-milp/pylint-badge.json)
+![Test coverage](https://img.shields.io/endpoint?url=https://kit-cel.github.io/handover-optim-milp/coverage-badge.json)
 
 # MILP-based Optimal Handover Decisions: A Benchmark for Mobility Management Algorithms [1]
 
@@ -36,6 +37,59 @@ To install the handover-optim-milp package, follow these steps:
     ```
 
 You are now ready to use the handover-optim-milp framework for your projects.
+
+Install the optional simulator integration only when generating new radio
+measurements or using its RRC implementation:
+
+```bash
+python -m pip install -e ../mobile-network-sim
+python -m pip install ".[simulator]"
+```
+
+The simulator is maintained in its own repository. Until its new package
+layout is published, install it from a local checkout first. The core package
+and its dataset builder do not import it.
+
+## Build a dataset from recorded network data
+
+The core package can build a dataset without the simulator. Supply one or more
+HDF5 files, an optimization configuration including an RRC profile, and the
+lambda values to solve:
+
+```bash
+ho-optim build_dataset \
+  --network-data id_val=/path/to/network_data/id_val.h5 \
+  --config-path config/optimization_config.yaml \
+  --a3-config-path config/reference_config.yaml \
+  --lambda 0.0 --lambda 0.1 --lambda 1.0 \
+  --output-root /path/to/output_dataset
+```
+
+Repeat `--a3-config-path` for additional A3 parameter profiles. The default
+uses the A3 profile inside the optimization configuration. Use
+`--a3-backend simulator` only when the simulator is installed. The two A3
+backends are labeled separately in the results. Incomplete builds can resume
+with identical inputs; a completed dataset is never overwritten.
+
+Check every output file against the recorded hashes with
+`ho-optim validate_dataset --dataset-root /path/to/output_dataset`.
+
+During the 1.x migration, `paper_v1` remains the default MILP profile and
+`current` selects the new formulation and raw signal inputs. These parallel
+profiles are temporary. After a complete validation run on the new dataset,
+the 2.0 release will remove the paper implementation and old dataset reader;
+the `v1.0.0` tag preserves the paper code and published-data workflow.
+
+The coverage badge measures the standalone CI job, including its small MILP
+cases when the runner has a Gurobi licence. Simulator integration has a
+separate CI job enabled by the repository variable `SIMULATOR_CI_ENABLED` and
+access secret `SIMULATOR_REPO_TOKEN`; it is excluded from the badge until
+that job is configured. Coverage is informational and has no minimum threshold.
+Full published-dataset MILP runs need a suitable Gurobi licence and are
+checked separately. For a local paper regression, set `PAPER_DATASET_ROOT` to
+the extracted published dataset and run
+`python -m pytest -q tests/test_paper_dataset_regression.py`. This case is much
+larger than the CI examples and may take substantially longer.
 
 ---
 

@@ -86,10 +86,11 @@ separate CI job enabled by the repository variable `SIMULATOR_CI_ENABLED` and
 access secret `SIMULATOR_REPO_TOKEN`; it is excluded from the badge until
 that job is configured. Coverage is informational and has no minimum threshold.
 Full published-dataset MILP runs need a suitable Gurobi licence and are
-checked separately. For a local paper regression, set `PAPER_DATASET_ROOT` to
-the extracted published dataset and run
-`python -m pytest -q tests/test_paper_dataset_regression.py`. This case is much
-larger than the CI examples and may take substantially longer.
+checked separately. For a quick consistency check of the published HDF5 data,
+configuration, and stored objective metrics, set `PAPER_DATASET_ROOT` to the
+extracted dataset and run
+`python -m pytest -q tests/test_paper_dataset_regression.py`. This check does
+not solve the full published MILP again.
 
 ---
 

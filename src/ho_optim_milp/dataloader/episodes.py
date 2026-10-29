@@ -51,7 +51,9 @@ def episode_shapes(path: str | Path) -> list[tuple[str, int, int, int]]:
     return shapes
 
 
-def load_episode(path: str | Path, episode_idx: int) -> EpisodeResult:
+def load_episode(
+    path: str | Path, episode_idx: int, *, max_steps: int | None = None
+) -> EpisodeResult:
     """Load a single episode from a merged network-simulation H5 file.
 
     Parameters
@@ -60,6 +62,8 @@ def load_episode(path: str | Path, episode_idx: int) -> EpisodeResult:
         HDF5 file containing ``ep_XXXX`` groups.
     episode_idx
         Position in the sorted list of episode groups.
+    max_steps
+        Optional prefix length for a short local run.
 
     Raises
     ------
@@ -77,10 +81,13 @@ def load_episode(path: str | Path, episode_idx: int) -> EpisodeResult:
         name = names[episode_idx]
         group = handle[name]
 
+        if max_steps is not None and max_steps <= 0:
+            raise ValueError("max_steps must be positive")
         arrays: dict[str, np.ndarray] = {}
         for field in _ARRAY_FIELDS:
             if field in group:
-                arrays[field] = np.asarray(group[field][()], dtype=np.float32)
+                selection = slice(None, max_steps) if max_steps is not None else slice(None)
+                arrays[field] = np.asarray(group[field][selection], dtype=np.float32)
 
         meta = _read_group_json(group.get("meta"))
         config_common = _read_group_json(handle.get("meta"))

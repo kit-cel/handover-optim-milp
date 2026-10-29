@@ -126,6 +126,12 @@ class ReferenceRRC:
         self._flags = {
             "rlf_start": [0] * 0,
             "rlf_expire": [0] * 0,
+            "rlf_no_ho": [0] * 0,
+            "hof_prep": [0] * 0,
+            "hof_cmd": [0] * 0,
+            "hof_exec": [0] * 0,
+            "ho_success": [0] * 0,
+            "ho_failure": [0] * 0,
             #
             "t310_start": [0] * 0,
             "t310_cancel": [0] * 0,
@@ -273,6 +279,7 @@ class ReferenceRRC:
     def _rlf_due_to_t310(self) -> None:
         """T310 expired → start the *RLF* timer (the official 3GPP rule)."""
         self._log("Declaring RLF due to T310 expiry", logging.INFO)
+        self._set_flag("rlf_no_ho")
         self._cancel_ttt()
         self._start_rlf_timer()
 
@@ -436,6 +443,8 @@ class ReferenceRRC:
         """
         self._log("HOF due to T310 expiry")
         self.flag_hof_detected = True
+        self._set_flag("hof_prep")
+        self._set_flag("ho_failure")
         self._cancel_prep()
         self._start_rlf_timer()
 
@@ -446,6 +455,8 @@ class ReferenceRRC:
         """
         self._log("HOF due to T310")
         self.flag_hof_detected = True
+        self._set_flag("hof_prep")
+        self._set_flag("ho_failure")
         self._cancel_prep()
         self._stop_t310()
         self._start_rlf_timer()
@@ -499,6 +510,7 @@ class ReferenceRRC:
         else:
             self._h_exec = None
             self.flag_ho_exec_success = True
+            self._set_flag("ho_success")
             self._trigger("exec_expired")  # complete HO
 
     def _finish_exec(self) -> None:
@@ -512,6 +524,9 @@ class ReferenceRRC:
     def _hof_due_to_oos(self) -> None:
         """Declare HOF because the target cell is OOS, cancel HO exec and start RLF."""
         self._log("HOF due to OOS target cell")
+        self.flag_hof_detected = True
+        self._set_flag("hof_exec")
+        self._set_flag("ho_failure")
         self._cancel_exec()
         self._start_rlf_timer()
 

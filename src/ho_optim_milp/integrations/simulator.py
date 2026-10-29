@@ -101,7 +101,7 @@ def run_a3_reference(episode: EpisodeResult, config: RRCConfig) -> list[dict[str
             "pp_rate": ping_pongs / handovers if handovers else float("nan"),
             "num_rlf": int(rlf_start[:, index].sum()),
             "num_hof": failures,
-            "hof_rate": failures / (failures + handovers) if failures + handovers else 0.0,
+            "hof_rate": failures / (failures + handovers) if failures + handovers else float("nan"),
         })
     return rows
 

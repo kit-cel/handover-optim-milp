@@ -1,18 +1,19 @@
 """MILP optimizer implementation using Gurobi."""
 
-import multiprocessing
-import os
-from typing import Any, TYPE_CHECKING
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from warnings import warn
 
 import gurobipy as gp
-from gurobipy import GRB
 import numpy as np
+from gurobipy import GRB
 
-from .base_optimizer import GurobiBaseOptimizer
+from ..dataloader.cell_ranking import rank1_neighbor_table
+from ..dataloader.preprocessing import preprocess_episode
 from . import milp_variables as milp_vars
+from .base_optimizer import GurobiBaseOptimizer
 from .milp_constraints import MILPConstraintBuilder
-from .milp_constraints_current import MILPConstraintBuilder as CurrentConstraintBuilder
 from .milp_dataclasses import (
     ConstraintContext,
     ProblemData,
@@ -20,13 +21,10 @@ from .milp_dataclasses import (
     WarmStartConfig,
 )
 from .milp_result_extractor import ResultExtractor
-from ..dataloader.preprocessing import preprocess_dataset
-from ..dataloader.cell_ranking import rank1_neighbor_table
-from ..reference.reference import RRCReferenceSimulation
 
 if TYPE_CHECKING:
-    from .optim_config import OptimConfig
     from ..result_manager.episode_result import EpisodeResult
+    from .optim_config import OptimConfig
 
 
 class HandoverOptimizerMILP(GurobiBaseOptimizer):
@@ -37,6 +35,7 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
     warm_start_config: WarmStartConfig
     vars: milp_vars.ModelVars
     _extractor: ResultExtractor | None
+    telemetry: dict[str, Any]
 
     def __init__(
         self,
@@ -60,29 +59,69 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
             t_rlfr_sim=config.rrc.t_rlfr_ms_simulated // t_res_ms,
             t_mts=config.rrc.t_mts_ms // t_res_ms,
         )
+        self._validate_rrc_constants()
 
         # Warm start/safe candidate pruning configuration
-        configured_warm_start = config.warm_start
-        self.warm_start_config = warm_start_config or WarmStartConfig(
-            enabled=configured_warm_start.enabled,
-            candidate_k=configured_warm_start.candidate_k,
-            candidate_delta_db=configured_warm_start.candidate_delta_db,
-            candidate_metric=configured_warm_start.candidate_metric,
-            candidate_include_prev=configured_warm_start.candidate_include_prev,
-            safe_pruning_time_limit_s=configured_warm_start.safe_pruning_time_limit_s,
-            safe_pruning_mip_gap=configured_warm_start.safe_pruning_mip_gap,
+        self.warm_start_config = (
+            warm_start_config or self._warm_start_config_from_optim_config()
         )
         self._extractor = None
+        self.telemetry = {
+            "model_build_time_s": None,
+            "warm_start_time_s": None,
+            "optimize_wall_time_s": None,
+            "total_wall_time_s": None,
+            "rank1_target_matrix_bytes": 0,
+            "warm_start_attempted": False,
+            "warm_start_applied": False,
+        }
 
-    def load_data(self, ep_result: "EpisodeResult", ue_idx: int) -> None:
-        """Data loading."""
-        self.ep_result = ep_result
-        use_l3 = self.config.model_profile == "paper_v1"
-        rsrp_dbm, sinr_db, q_in_mat, q_out_mat = preprocess_dataset(
-            ep_result, self.rrc_config, use_l3_filtering=use_l3, ue_no=ue_idx
+    def _validate_rrc_constants(self) -> None:
+        """Validate derived RRC constants required by the MILP formulation."""
+        if self.config.rrc.t310_ms % self.config.rrc.t_res_ms != 0:
+            raise ValueError(
+                "MILP T310 duration must be a multiple of t_res_ms. "
+                f"Got t310_ms={self.config.rrc.t310_ms}, "
+                f"t_res_ms={self.config.rrc.t_res_ms}."
+            )
+        if self.rrc_consts.t310 <= 1:
+            raise ValueError(
+                "MILP T310 formulation requires T310 > 1 time step. "
+                f"Got t310_ms={self.config.rrc.t310_ms}, "
+                f"t_res_ms={self.config.rrc.t_res_ms}, "
+                f"derived T310={self.rrc_consts.t310}."
+            )
+
+    def _warm_start_config_from_optim_config(self) -> WarmStartConfig:
+        cfg = self.config.warm_start
+        return WarmStartConfig(
+            enabled=cfg.enabled,
+            candidate_k=cfg.candidate_k,
+            candidate_delta_db=cfg.candidate_delta_db,
+            candidate_metric=cfg.candidate_metric,
+            candidate_include_prev=cfg.candidate_include_prev,
+            safe_pruning_time_limit_s=cfg.safe_pruning_time_limit_s,
+            safe_pruning_mip_gap=cfg.safe_pruning_mip_gap,
         )
 
+    def load_data(self, ep_result: "EpisodeResult", ue_idx: int) -> None:
+        """Filter the episode's radio trace and slice out one UE."""
+        self.ep_result = ep_result
+        # Raw wideband SINR feeds the objective; Q-in/Q-out come from
+        # the shared L1 filter. The MILP has no measurement entity, so no
+        # L3 filtering applies to it at all.
+        trace = preprocess_episode(ep_result, self.rrc_config)
+        rsrp_dbm, sinr_db, q_in_mat, q_out_mat = trace.as_2d(ue_idx)
+
         n_bs, n_steps = sinr_db.shape
+        rank1_neighbor = (
+            rank1_neighbor_table(rsrp_dbm)
+            if self.config.handover_target_mode == "rank1_neighbor"
+            else None
+        )
+        self.telemetry["rank1_target_matrix_bytes"] = (
+            int(rank1_neighbor.nbytes) if rank1_neighbor is not None else 0
+        )
         self.data = ProblemData(
             ue_idx=ue_idx,
             n_bs=n_bs,
@@ -91,11 +130,7 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
             sinr_db=sinr_db,
             q_in_mat=q_in_mat,
             q_out_mat=q_out_mat,
-            rank1_neighbor=(
-                rank1_neighbor_table(rsrp_dbm)
-                if self.config.handover_target_mode == "rank1_neighbor"
-                else None
-            ),
+            rank1_neighbor=rank1_neighbor,
         )
 
         self._data_loaded = True
@@ -105,47 +140,55 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
         if not self._data_loaded:
             raise RuntimeError("Data must be loaded before building the model.")
 
+        t0 = time.perf_counter()
         # Build final, unpruned model -> optimality preserved regardless of warm start
         self.init_model(name=name)
-        self.model.setParam(
-            "Threads",
-            self.config.gurobi.threads or multiprocessing.cpu_count(),
-        )
-        if self.config.gurobi.time_limit_s is not None:
-            self.model.setParam("TimeLimit", self.config.gurobi.time_limit_s)
-        if self.config.gurobi.mip_gap is not None:
-            self.model.setParam("MIPGap", self.config.gurobi.mip_gap)
-        if not self.config.gurobi.log_to_console:
-            self.model.setParam("OutputFlag", 0)
+        self._apply_gurobi_parameters(self.model)
 
         self._add_variables()
         self._add_constraints()
         self._set_objective()
+        self.telemetry["model_build_time_s"] = time.perf_counter() - t0
 
     def apply_warm_start_if_configured(self) -> None:
         """Apply warm start if it was computed during initialization."""
         if not self.warm_start_config.enabled:
+            self.telemetry["warm_start_attempted"] = False
+            self.telemetry["warm_start_applied"] = False
+            self.telemetry["warm_start_time_s"] = 0.0
             return
         if self.ep_result is None:
             raise RuntimeError("Data must be loaded before applying warm start.")
         if not self._variables_added:
             raise RuntimeError("Variables must be added before applying warm start.")
 
+        self.telemetry["warm_start_attempted"] = True
+        t0 = time.perf_counter()
         _warm_start_x = self._solve_pruned_for_warm_start()
+        self.telemetry["warm_start_time_s"] = time.perf_counter() - t0
         if _warm_start_x is None:
+            self.telemetry["warm_start_applied"] = False
             warn(
                 "No warm start solution found or warm start not configured. "
                 "Proceeding without warm start."
             )
         else:
             self._apply_warm_start(_warm_start_x)
+            self.telemetry["warm_start_applied"] = True
 
     def solve(self) -> None:
         """Run the solver and build the ResultExtractor for post-processing."""
+        t0 = time.perf_counter()
         super().solve()
-        if self._optimization_finished:
-            log_dir = os.path.join("results", "optimization")
-            os.makedirs(log_dir, exist_ok=True)
+        self.telemetry["optimize_wall_time_s"] = time.perf_counter() - t0
+        model_build = self.telemetry.get("model_build_time_s") or 0.0
+        warm_start = self.telemetry.get("warm_start_time_s") or 0.0
+        self.telemetry["total_wall_time_s"] = (
+            model_build + warm_start + self.telemetry["optimize_wall_time_s"]
+        )
+        if self._optimization_finished and self.model.SolCount > 0:
+            log_dir = Path(self.config.base_dir) / self.config.log_dir / "optimization"
+            log_dir.mkdir(parents=True, exist_ok=True)
             self._extractor = ResultExtractor(
                 self.vars,
                 self.data,
@@ -153,8 +196,28 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
                 simulation_id=self.rrc_config.simulation_id,
                 lambda_r=self.config.lambda_r,
                 ep_name=self.ep_result.ep_name,
-                log_dir=log_dir,
+                log_dir=str(log_dir),
             )
+
+    def _apply_gurobi_parameters(self, model: gp.Model) -> None:
+        """Apply configured Gurobi parameters to a model."""
+        cfg = self.config.gurobi
+        if cfg.parameter_file:
+            model.read(str(Path(cfg.parameter_file).expanduser()))
+        if cfg.threads is not None:
+            model.setParam("Threads", cfg.threads)
+        if cfg.time_limit_s is not None:
+            model.setParam("TimeLimit", cfg.time_limit_s)
+        if cfg.mip_gap is not None:
+            model.setParam("MIPGap", cfg.mip_gap)
+        model.setParam("OutputFlag", 1 if cfg.log_to_console else 0)
+        if cfg.gurobi_log_file:
+            Path(cfg.gurobi_log_file).expanduser().parent.mkdir(
+                parents=True, exist_ok=True
+            )
+            model.setParam("LogFile", cfg.gurobi_log_file)
+        if cfg.concurrent_mip > 1:
+            model.setParam("ConcurrentMIP", cfg.concurrent_mip)
 
     def extract_results(self) -> dict[str, np.ndarray]:
         """Extract optimization results as numpy arrays."""
@@ -181,12 +244,19 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
         return self.get_result_metrics()[self.data.ue_idx]
 
     def log_results_to_csv(
-        self, file_name: str | None = None, subfolder: str | None = None
+        self,
+        file_name: str | None = None,
+        subfolder: str | None = None,
+        extra_columns: dict[str, Any] | None = None,
     ) -> None:
         """Log optimization results to CSV file."""
         if not self._optimization_finished or self._extractor is None:
             raise RuntimeError("Optimization must finish before logging results.")
-        self._extractor.log_results_to_csv(file_name=file_name, subfolder=subfolder)
+        self._extractor.log_results_to_csv(
+            file_name=file_name,
+            subfolder=subfolder,
+            extra_columns=extra_columns,
+        )
 
     def _add_constraints(self) -> None:
         """Assemble and add all MILP constraints to the model."""
@@ -198,24 +268,11 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
             vars=self.vars,
             data=self.data,
             consts=self.rrc_consts,
-            debug=self.config.debug,
-            ref_results=self._get_reference_result(),
+            initial_access=self.config.initial_access,
+            handover_target_mode=self.config.handover_target_mode,
         )
 
-        if self.config.model_profile == "current":
-            ctx = ConstraintContext(
-                model=self.model,
-                vars=self.vars,
-                data=self.data,
-                consts=self.rrc_consts,
-                debug=None,
-                ref_results=None,
-                initial_access=self.config.initial_access,
-                handover_target_mode=self.config.handover_target_mode,
-            )
-            cs_builder = CurrentConstraintBuilder(ctx)
-        else:
-            cs_builder = MILPConstraintBuilder(ctx)
+        cs_builder = MILPConstraintBuilder(ctx)
 
         cs_builder.add_constraints()
         self._constraints_added = cs_builder.constraints_added
@@ -386,43 +443,22 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
 
         return candidates
 
-    def _get_reference_result(self) -> dict[str, np.ndarray] | None:
-        """Run the reference RRC simulation and return its results when in debug mode.
-
-        Returns ``None`` in normal (non-debug) operation so that no reference
-        labels are injected into the constraint set.
-        """
-        if self.config.debug:
-            sim = RRCReferenceSimulation(self.config.rrc, self.ep_result)
-            sim.run()
-            return sim.extract_results()
-        return None
-
     def _set_objective(self) -> None:
-        """Define and register the optimization objective."""
+        """Define and register the Lagrangian objective from Eq. (4)."""
         if not self._variables_added:
             raise RuntimeError("Variables must be added before setting objective.")
         if not self._constraints_added:
             raise RuntimeError("Constraints must be added before setting objective.")
 
-        if self.config.model_profile == "current":
-            weights = self.config.discount_gamma ** np.arange(self.data.n_steps)
-            scale = float(weights.sum())
-            obj_rate = (weights * self.vars.rate.r_rate).sum() / scale
-            obj_out = (
-                weights * (self.vars.ho.exec_running + self.vars.rlf.running)
-            ).sum() / scale
-        else:
-            obj_rate = self.vars.rate.r_rate.sum() / self.data.n_steps
-            obj_out = (
-                self.vars.ho.exec_running.sum() + self.vars.rlf.running.sum()
-            ) / self.data.n_steps
+        weights = self.config.discount_gamma ** np.arange(self.data.n_steps)
+        scale = float(weights.sum())
+        obj_rate = (weights * self.vars.rate.r_rate).sum() / scale
+        obj_out = (
+            weights * (self.vars.ho.exec_running + self.vars.rlf.running)
+        ).sum() / scale
         self.obj = obj_rate - self.config.lambda_r * obj_out
 
-        if self.config.debug:
-            self.model.setObjective(0.0, GRB.MAXIMIZE)
-        else:
-            self.model.setObjective(self.obj, GRB.MAXIMIZE)
+        self.model.setObjective(self.obj, GRB.MAXIMIZE)
 
         self._objective_set = True
 
@@ -437,7 +473,7 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
         candidates = self._compute_candidate_sets()
 
         pruned = gp.Model("HandoverOptimizerMILP_pruned")
-        pruned.setParam("Threads", multiprocessing.cpu_count())
+        self._apply_gurobi_parameters(pruned)
         pruned.setParam("OutputFlag", 0)
 
         if (

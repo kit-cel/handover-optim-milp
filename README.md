@@ -4,9 +4,9 @@
 # MILP-based Optimal Handover Decisions: A Benchmark for Mobility Management Algorithms [1]
 
 ## Description
-This repository accompanies the paper *MILP-Based Optimal Handover Decisions: A Benchmark for Mobility Management Algorithms* [1]. It optimizes serving-cell assignments for recorded network trajectories using a mixed-integer linear program (MILP). The objective balances average achieved rate against time spent disconnected, producing a rate-outage Pareto frontier across different trade-off weights.
+This repository accompanies the paper *MILP-Based Optimal Handover Decisions: A Benchmark for Mobility Management Algorithms* [1]. The immutable `v1.0.0` release contains the paper's code. Current development targets schema-3 datasets and provides one MILP formulation for saved radio trajectories, with unrestricted and rank-one handover-target configurations.
 
-The formulation includes handover execution and key radio resource control (RRC) mechanisms: N310/N311 counters, the T310 timer, and radio link failure (RLF) recovery. An A3 event-based reference simulation provides a baseline for comparing handover policies on the same trajectories. The [published IEEE DataPort dataset](https://dx.doi.org/10.21227/9zk6-vb30) contains the network measurements, MILP decisions, and reference results used in the paper; the commands below run individual cases and recreate the comparison plots.
+The formulation includes handover execution and key radio resource control (RRC) mechanisms: N310/N311 counters, the T310 timer, and radio link failure (RLF) recovery. An A3 event-based reference simulation provides a baseline on the same trajectories. The [published IEEE DataPort dataset](https://dx.doi.org/10.21227/9zk6-vb30) belongs to `v1.0.0`; the current development code reads schema-3 datasets and builds new releases from saved `network_data` without the simulator.
 
 The figure shows the rate-outage trade-off for the published 60 km/h trajectories, including the MILP frontier and A3 reference curves for three quantile selections.
 
@@ -57,73 +57,68 @@ HDF5 files, an optimization configuration including an RRC profile, and the
 lambda values to solve:
 
 ```bash
-ho-optim build_dataset \
+ho-optim build-dataset \
   --network-data id_val=/path/to/network_data/id_val.h5 \
-  --config-path config/optimization_config.yaml \
-  --a3-config-path config/reference_config.yaml \
+  --config config/optimization_config.yaml \
+  --a3-config config/reference_config.yaml \
+  --selection-split id_val \
   --lambda 0.0 --lambda 0.1 --lambda 1.0 \
   --output-root /path/to/output_dataset
 ```
 
-Repeat `--a3-config-path` for additional A3 parameter profiles. The default
-uses the A3 profile inside the optimization configuration. Use
+Repeat `--a3-config` for additional A3 parameter profiles. Use
 `--a3-backend simulator` only when the simulator is installed. The two A3
-backends are labeled separately in the results. Incomplete builds can resume
-with identical inputs; a completed dataset is never overwritten.
+backends are labeled separately in the results. The builder creates a new
+schema-3 dataset and refuses to overwrite an existing output directory.
 
-Check every output file against the recorded hashes with
-`ho-optim validate_dataset --dataset-root /path/to/output_dataset`.
+Check the dataset structure with
+`ho-optim validate-dataset --dataset-root /path/to/output_dataset`. Add
+`--verify-artifact-hashes` to check every recorded artifact hash.
 
-During the 1.x migration, `paper_v1` remains the default MILP profile and
-`current` selects the new formulation and raw signal inputs. These parallel
-profiles are temporary. After a complete validation run on the new dataset,
-the 2.0 release will remove the paper implementation and old dataset reader;
-the `v1.0.0` tag preserves the paper code and published-data workflow.
+The development version uses one MILP formulation with raw signal inputs.
+Its `unrestricted` and `binary_rank1` configurations use the same model with
+different initial access and handover target options. The `v1.0.0` tag
+preserves the paper code and published-data workflow. N310 and N311 default
+to `1` as specified in 3GPP TS 38.331 section 9.2.3;
+explicit configuration values take precedence. The default RRC step is
+`40 ms`; configured A3 TTT values must be multiples of that step.
 
 The coverage badge measures the standalone CI job, including its small MILP
 cases when the runner has a Gurobi licence. Simulator integration has a
 separate CI job enabled by the repository variable `SIMULATOR_CI_ENABLED` and
 access secret `SIMULATOR_REPO_TOKEN`; it is excluded from the badge until
 that job is configured. Coverage is informational and has no minimum threshold.
-Full published-dataset MILP runs need a suitable Gurobi licence and are
-checked separately. For a quick consistency check of the published HDF5 data,
-configuration, and stored objective metrics, set `PAPER_DATASET_ROOT` to the
-extracted dataset and run
-`python -m pytest -q tests/test_paper_dataset_regression.py`. This check does
-not solve the full published MILP again.
+Existing full-size datasets are inspected without rerunning their
+optimization campaigns.
 
 ---
 
-## Getting Started
-### **Get the Dataset**
-Download the [published dataset](https://dx.doi.org/10.21227/9zk6-vb30) and extract the archive into the repository directory. The resulting `dataset_root/` directory must contain `network_data/`, `milp_results/`, and `reference_results/`.
+## Run on stored network data
 
-The dataset and detailed per-UE results are hosted on IEEE DataPort rather than in this repository because of their size. Results generated with this release may differ from stored per-step binary flags and handover counts where the original export truncated solver values just below an integer.
+The commands below take a recorded HDF5 file directly. For a short local
+check, `--max-steps` reads only a prefix of the trajectory.
 
-### Run the MILP Optimization and the RRC Reference Simulation
-1. **Run the optimization**:
-   ```bash
-   python -m ho_optim_milp.run run_optimization --ep-idx=0 --ue-idx=0
-   ```
-   where `--ep-idx` specifies the episode (0-5) of the dataset and `--ue-idx` defines the UE trajectory that should be used (0-99).
-2. **Run the RRC reference simulation**:
-   ```bash
-   python -m ho_optim_milp.run run_reference --ep-idx=0
-   ```
-   where `--ep-idx` specifies the episode (0-5) of the dataset. The reference simulation is automatically performed for all UEs in the dataset.
+```bash
+ho-optim optimize --network-data /path/to/network_data/id_val.h5 \
+  --config config/optimization_config.yaml --episode-index 0 --ue-index 0 \
+  --max-steps 20 --output-dir /path/to/single_optimization
+ho-optim run-a3 --network-data /path/to/network_data/id_val.h5 \
+  --config config/reference_config.yaml --episode-index 0 --max-steps 20 \
+  --output-dir /path/to/a3_reference
+```
 
-### Results
-You can plot the results stored in the dataset and reproduce the figures in [1] using the included plotting functionality.
+To regenerate result figures from a completed dataset, choose a split and a
+separate output directory:
 
-1. **Plot the rate-outage Pareto fronts of the optimization and the reference.**:
-   ```bash
-   python -m ho_optim_milp.run plot_pareto_fronts
-   ```
+```bash
+ho-optim plot-dataset --dataset-root /path/to/dataset \
+  --split id_val --output-root /path/to/result_plots
+```
 
-2. **Plot the trade-off between the mean achieved rate and the relative connected time versus the Lagrangian multiplier lambda.**:
-   ```bash
-   python -m ho_optim_milp.run plot_tradeoff
-   ```
+The command reads saved metrics and event tables; it does not rerun MILP or A3.
+
+Figures and metrics from the published paper are available with the
+`v1.0.0` release. The development branch targets the schema-3 dataset.
 
 ## Citation [1]
 If you use the **handover-optim-milp** framework in your work, please cite our paper:

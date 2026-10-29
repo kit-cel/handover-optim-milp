@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ho_optim_milp"
-version = "1.1.0.dev0"
+version = "2.0.0.dev0"
 description = "Framework for handover optimization using mixed-integer linear programming."
 authors = [
     { name = "Johannes Voigt", email = "johannes.voigt@kit.edu" }
@@ -33,10 +33,7 @@ where = ["src"]
 include-package-data = true
 
 [project.scripts]
-ho-optim = "ho_optim_milp.run:main"
+ho-optim = "ho_optim_milp.cli:main"
 
 [project.urls]
 Repository = "https://github.com/kit-cel/handover-optim-milp"
-
-[tool.pytest.ini_options]
-markers = ["paper_dataset: requires the published dataset and a Gurobi licence"]

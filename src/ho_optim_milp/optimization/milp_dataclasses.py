@@ -74,7 +74,5 @@ class ConstraintContext:
     vars: ModelVars
     data: ProblemData
     consts: RRCConstants
-    debug: bool | None
-    ref_results: dict[str, np.ndarray] | None
     initial_access: str = "free"
     handover_target_mode: str = "free"

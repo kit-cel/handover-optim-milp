@@ -1,5 +1,6 @@
 """RRC configuration module."""
 
+import math
 from typing import Any
 from pydantic import Field, model_validator, StrictFloat, StrictStr
 
@@ -15,7 +16,7 @@ class RRCConfig(BaseConfig):
 
     # General RRC parameters
     t_res_ms: StrictPositiveInt = Field(
-        default=0, description="RRC time resolution in milliseconds."
+        default=40, description="RRC time resolution in milliseconds."
     )
 
     # Resource management
@@ -27,13 +28,13 @@ class RRCConfig(BaseConfig):
     )
 
     # Counters and timers for radio link monitoring
-    n310: StrictNonNegativeInt = Field(
-        default=10,
-        description="Number of consecutive out-of-sync measurements for N310.",
+    n310: StrictPositiveInt = Field(
+        default=1,
+        description="Consecutive out-of-sync indications; default n1 in 3GPP TS 38.331 section 9.2.3.",
     )
-    n311: StrictNonNegativeInt = Field(
-        default=10,
-        description="Number of consecutive out-of-sync measurements for N311.",
+    n311: StrictPositiveInt = Field(
+        default=1,
+        description="Consecutive in-sync indications; default n1 in 3GPP TS 38.331 section 9.2.3.",
     )
     t301_ms: StrictNonNegativeInt = Field(
         default=1_000, description="Timer T301 duration in ms."
@@ -140,4 +141,18 @@ class RRCConfig(BaseConfig):
 
     @model_validator(mode="after")
     def _validate(self) -> "RRCConfig":
+        event = self.ho_event_config.get("a3")
+        if isinstance(event, dict) and "ttt_ms" in event:
+            ttt_ms = event["ttt_ms"]
+            if (
+                isinstance(ttt_ms, bool)
+                or not isinstance(ttt_ms, (int, float))
+                or not math.isfinite(ttt_ms)
+                or ttt_ms < 0
+                or self.t_res_ms <= 0
+                or ttt_ms % self.t_res_ms != 0
+            ):
+                raise ValueError(
+                    "A3 ttt_ms must be a non-negative multiple of t_res_ms"
+                )
         return self

@@ -1,5 +1,6 @@
 lambda_r: 0.0
-use_l3_filtered_sinr: true
+initial_access: free
+handover_target_mode: free
 rrc:
   t_res_ms: 40
 
@@ -7,7 +8,7 @@ rrc:
   q_out_db: -8
 
   n310: 1
-  n311: 10
+  n311: 1
   t310_ms: 1000
 
   t_ho_prep_ms_simulated: 40
@@ -16,3 +17,8 @@ rrc:
   t_mts_ms: 1000
 
   l3_filter_coef: 1
+  ho_event_config:
+    a3:
+      ttt_ms: 0
+      hys: 0.0
+      offset: 0.0

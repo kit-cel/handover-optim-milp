@@ -26,6 +26,7 @@ class RRCReferenceSimulation:
         data: "EpisodeResult",
         lambda_r: float = 0.0,
         log_full_results: bool = False,
+        trigger_handovers: bool = True,
     ) -> None:
         """Initialise the RRC reference simulation.
 
@@ -40,12 +41,16 @@ class RRCReferenceSimulation:
         log_full_results:
             When ``True``, write a full per-TTI CSV log alongside the
             aggregated result buffer.
+        trigger_handovers:
+            Disable A3 decisions while retaining radio link monitoring and
+            recovery, for a no-handover reference run.
         """
         self.rrc_config = rrc_config
         self.data = data
 
         self.lambda_r = lambda_r
         self.log_full_results_to_csv = log_full_results
+        self.trigger_handovers = trigger_handovers
 
         # Dimensions
         if data.rsrp.ndim == 3:
@@ -83,6 +88,7 @@ class RRCReferenceSimulation:
             "rlf_start": [],
             "rlf_running": [],
         }
+        self.step_snapshots: list[list[dict[str, Any]]] = []
 
     def run(self) -> None:
         """Run the RRC reference simulation."""
@@ -122,6 +128,7 @@ class RRCReferenceSimulation:
 
                     # Log snapshot
                     self._log_snapshot()
+                    self._record_step_snapshots()
 
                     # 5. Advance clock
                     self.clock.advance(step_ms=self.tti_ms)
@@ -133,11 +140,17 @@ class RRCReferenceSimulation:
 
                 # Step the simulation
                 self._simulation_step(rsrp_dbm, sinr_db, q_in_mat, q_out_mat)
+                self._record_step_snapshots()
 
                 # 5. Advance clock
                 self.clock.advance(step_ms=self.tti_ms)
 
         print("RRC UE simulation completed.")
+
+    def _record_step_snapshots(self) -> None:
+        """Keep one post-step state per radio sample for dataset output."""
+        if self.clock.now % self.rrc_config.t_res_ms == 0:
+            self.step_snapshots.append([ue.snapshot() for ue in self.ue_list])
 
     def _simulation_step(
         self,
@@ -164,8 +177,9 @@ class RRCReferenceSimulation:
 
         # 3. Measurement reporting and HO decisions
         if (self.clock.now % self.msr_interval_ms) == 0:
-            for ue in self.ue_list:
-                ue.process_measurements()
+            if self.trigger_handovers:
+                for ue in self.ue_list:
+                    ue.process_measurements()
 
     def _log_snapshot(self) -> None:
         """Append per-log-interval UE state flags to the in-memory result buffer."""

@@ -212,6 +212,7 @@ __marimo__/
 data
 dataset
 dataset_root
+/datasets/
 dataset.zip
 
 # Plots

@@ -1,4 +1,4 @@
-"""Small solver checks for the paper and current MILP profiles."""
+"""Small solver checks for the current single MILP formulation."""
 
 import numpy as np
 import pytest
@@ -24,7 +24,7 @@ def gurobi_license() -> None:
         pytest.skip(f"Gurobi licence unavailable: {error}")
 
 
-def make_config(profile: str = "paper_v1", **options: object) -> OptimConfig:
+def make_config(**options: object) -> OptimConfig:
     rrc = RRCConfig(
         t_res_ms=40,
         n310=1,
@@ -40,7 +40,6 @@ def make_config(profile: str = "paper_v1", **options: object) -> OptimConfig:
     )
     return OptimConfig(
         lambda_r=1.0,
-        model_profile=profile,
         rrc=rrc,
         gurobi={"threads": 1, "log_to_console": False},
         **options,
@@ -70,9 +69,28 @@ def test_solver_integer_export_rounds_numerical_noise() -> None:
     np.testing.assert_array_equal(_integer_solution([1.99999, 3.00001]), [2, 3])
 
 
-def test_new_options_require_current_profile() -> None:
-    with pytest.raises(ValueError, match="require model_profile"):
-        make_config(initial_access="strongest_rsrp")
+def test_rlm_counters_default_to_specification_values() -> None:
+    config = RRCConfig()
+    assert config.t_res_ms == 40
+    assert config.n310 == 1
+    assert config.n311 == 1
+    overridden = RRCConfig(t_res_ms=40, n310=10, n311=10)
+    assert overridden.n310 == 10
+    assert overridden.n311 == 10
+
+
+def test_a3_ttt_uses_the_rrc_step_grid() -> None:
+    assert RRCConfig(ho_event_config={"a3": {"ttt_ms": 0}}).t_res_ms == 40
+    assert RRCConfig(ho_event_config={"a3": {"ttt_ms": 80}}).t_res_ms == 40
+    with pytest.raises(ValueError, match="multiple of t_res_ms"):
+        RRCConfig(ho_event_config={"a3": {"ttt_ms": 64}})
+
+
+def test_milp_rejects_t310_truncation() -> None:
+    config = make_config()
+    config.rrc.t310_ms = 100
+    with pytest.raises(ValueError, match="T310 duration must be a multiple"):
+        HandoverOptimizerMILP(config)
 
 
 @pytest.mark.parametrize("option", [
@@ -80,38 +98,32 @@ def test_new_options_require_current_profile() -> None:
     {"initial_access": "strongest_rsrp"},
     {"handover_target_mode": "rank1_neighbor"},
 ])
-def test_each_new_model_option_is_explicit(option: dict[str, object]) -> None:
-    with pytest.raises(ValueError, match="require model_profile"):
-        make_config(**option)
-    config = make_config("current", **option)
-    assert config.model_profile == "current"
+def test_current_model_options_are_available(option: dict[str, object]) -> None:
+    config = make_config(**option)
+    for key, value in option.items():
+        assert getattr(config, key) == value
 
 
-def test_paper_and_current_preprocessing_differ_without_solver() -> None:
+def test_milp_uses_raw_sinr_without_solver() -> None:
     episode = make_episode()
-    paper = HandoverOptimizerMILP(make_config())
-    current = HandoverOptimizerMILP(make_config("current"))
-    paper.load_data(episode, ue_idx=0)
-    current.load_data(episode, ue_idx=0)
-    assert paper.rrc_consts.n311 == 10
-    np.testing.assert_array_equal(current.data.sinr_db, episode.sinr[:, 0, :].T)
-    assert not np.array_equal(paper.data.sinr_db, current.data.sinr_db)
-    assert paper.config.use_l3_filtered_sinr is True
-    assert current.config.use_l3_filtered_sinr is False
+    solver = HandoverOptimizerMILP(make_config())
+    assert solver.config.gurobi.mip_gap == 0.0
+    solver.load_data(episode, ue_idx=0)
+    assert solver.rrc_consts.n311 == 10
+    np.testing.assert_array_equal(solver.data.sinr_db, episode.sinr[:, 0, :].T)
 
 
-def test_explicit_signal_source_cannot_disagree_with_profile() -> None:
-    with pytest.raises(ValueError, match="conflicts with model_profile"):
-        make_config("current", use_l3_filtered_sinr=True)
+@pytest.mark.parametrize("obsolete", ["model_profile", "use_l3_filtered_sinr"])
+def test_obsolete_profile_options_are_rejected(obsolete: str) -> None:
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        make_config(**{obsolete: "paper_v1" if obsolete == "model_profile" else True})
 
 
-@pytest.mark.parametrize("profile", ["paper_v1", "current"])
-def test_profile_solves_and_exports_consistent_metrics(
-    profile: str, gurobi_license: None
-) -> None:
-    solver = HandoverOptimizerMILP(make_config(profile))
+def test_solver_exports_consistent_metrics(gurobi_license: None) -> None:
+    solver = HandoverOptimizerMILP(make_config())
     solver.load_data(make_episode(), ue_idx=0)
     solver.setup_model()
+    assert solver.model.Params.MIPGap == 0.0
     solver.solve()
     assert solver.model.SolCount > 0
     arrays = solver.extract_results()
@@ -123,11 +135,11 @@ def test_profile_solves_and_exports_consistent_metrics(
     assert metrics["pp_rate"] >= 0 or np.isnan(metrics["pp_rate"])
 
 
-def test_current_profile_uses_raw_sinr_and_rank1_initial_access(
+def test_rank1_initial_access(
     gurobi_license: None,
 ) -> None:
     config = make_config(
-        "current", initial_access="strongest_rsrp", handover_target_mode="rank1_neighbor"
+        initial_access="strongest_rsrp", handover_target_mode="rank1_neighbor"
     )
     solver = HandoverOptimizerMILP(config)
     episode = make_episode()
@@ -142,7 +154,7 @@ def test_current_profile_uses_raw_sinr_and_rank1_initial_access(
 def test_discounted_objective_matches_exported_rate_and_outage(
     gurobi_license: None,
 ) -> None:
-    config = make_config("current", discount_gamma=0.9)
+    config = make_config(discount_gamma=0.9)
     solver = HandoverOptimizerMILP(config)
     solver.load_data(make_episode(), ue_idx=0)
     solver.setup_model()

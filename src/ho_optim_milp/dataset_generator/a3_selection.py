@@ -1,30 +1,8 @@
-"""Selecting A3 reference parameters at three levels of adaptation.
+"""Select A3 profiles at global, speed-aware, and split-oracle levels.
 
-A single "best A3" number is not a fair baseline: how well A3 does
-depends entirely on how much it was allowed to adapt to the data it is
-scored on. The release therefore reports three explicitly labelled
-levels, and the labelling is what makes them interpretable:
-
-``global``
-    One parameter set chosen on ID-Val across all speeds, then frozen
-    for ID-Test and both OOD splits. This is the *deployable* baseline
-    and the one the primary hypothesis is tested against.
-
-``speed_aware``
-    One parameter set per predefined ID speed bin, still chosen only on
-    ID-Val. OOD-Speed is clipped onto the highest bin without retuning,
-    because a deployed network cannot retune for a speed regime it has
-    never seen.
-
-``split_oracle``
-    Re-optimized separately on each test split. **Not deployable** --
-    it uses the test split's own labels. It exists as an upper bound on
-    what any A3 parameterization could achieve, so a gap to it says
-    something different from a gap to ``global``.
-
-Selection always uses the same objective as the MILP and the agents,
-paper Eq. (7): ``s_k(lambda) = L_r,k - lambda * (1 - L_c,k)``.
-"""
+The first two use the declared selection split. The split oracle uses
+evaluation data and is not deployable. Scores equal mean capacity minus
+lambda times outage fraction."""
 
 from __future__ import annotations
 
@@ -38,8 +16,7 @@ LEVEL_SPEED_AWARE = "speed_aware"
 LEVEL_SPLIT_ORACLE = "split_oracle"
 LEVELS = (LEVEL_GLOBAL, LEVEL_SPEED_AWARE, LEVEL_SPLIT_ORACLE)
 
-# Speed bins for the speed-aware level, fixed in advance so the binning
-# is not itself tuned on results. Half-open except the last.
+# Fixed speed bins; half-open except the last.
 DEFAULT_SPEED_BINS: tuple[tuple[float, float], ...] = (
     (30.0, 50.0),
     (50.0, 70.0),
@@ -49,12 +26,7 @@ DEFAULT_SPEED_BINS: tuple[tuple[float, float], ...] = (
 
 @dataclass(frozen=True, slots=True, order=True)
 class A3Parameters:
-    """One A3 parameter set.
-
-    Ordered so ties in the selection score can be broken by the
-    parameters themselves rather than by dict iteration order, which
-    would make the winner depend on how the results were read off disk.
-    """
+    """A3 parameters; ordering makes score ties deterministic."""
 
     ttt_ms: float
     hys_db: float
@@ -105,12 +77,7 @@ def objective_score(
 def _aggregate_by_parameters(
     rows: Iterable[Mapping[str, Any]], lambda_value: float
 ) -> dict[A3Parameters, float]:
-    """Average each parameter set's score over the rows it appears in.
-
-    Averaging the *score* per parameter set, rather than picking the best
-    single trajectory, is what makes the choice a property of the
-    parameter set instead of a lucky UE.
-    """
+    """Average each profile score across eligible trajectories."""
     totals: dict[A3Parameters, list[float]] = {}
     for row in rows:
         if row.get("method") not in (None, "a3"):
@@ -135,12 +102,7 @@ def _aggregate_by_parameters(
 
 
 def _best(scored: Mapping[A3Parameters, float]) -> tuple[A3Parameters, float]:
-    """Return the highest-scoring parameter set, breaking ties reproducibly.
-
-    Ties are broken by the parameters themselves rather than by dict
-    order, so the same input always yields the same winner regardless of
-    how the rows happened to be ordered on disk.
-    """
+    """Return the highest score, breaking ties by parameters."""
     if not scored:
         raise ValueError("no A3 results to select from")
     best_score = max(scored.values())
@@ -168,20 +130,7 @@ def select_global(
     lambda_value: float,
     selection_split: str,
 ) -> A3Selection:
-    """Choose one deployable parameter set on the selection split.
-
-    Parameters
-    ----------
-    rows
-        A3 result rows, each carrying the parameters, ``mean_capacity``,
-        ``rel_connected_time``, and ``split``.
-    lambda_value
-        The lambda this selection is for; one specialist per lambda.
-    selection_split
-        The split selection may look at. Rows from any other split are
-        ignored rather than silently included -- selecting on a test
-        split is the exact mistake this signature exists to prevent.
-    """
+    """Select one profile using only the declared selection split."""
     eligible = _eligible_rows(rows, split=selection_split, lambda_value=lambda_value)
     if not eligible:
         raise ValueError(
@@ -218,14 +167,7 @@ def select_speed_aware(
     selection_split: str,
     bins: Sequence[tuple[float, float]] = DEFAULT_SPEED_BINS,
 ) -> list[A3Selection]:
-    """Choose one parameter set per predefined ID speed bin.
-
-    Rows must carry ``mean_speed_kph`` (the UE's own sampled mean speed).
-    Rows whose speed falls outside every bin are skipped: for the ID
-    splits that cannot happen by construction, and for anything else the
-    caller should be using :func:`clip_to_highest_bin` instead of
-    silently extending a bin.
-    """
+    """Select one profile per populated speed bin on the selection split."""
     eligible = _eligible_rows(rows, split=selection_split, lambda_value=lambda_value)
     if not eligible:
         raise ValueError(
@@ -268,12 +210,7 @@ def select_speed_aware(
 def clip_to_highest_bin(
     selections: Sequence[A3Selection], bins: Sequence[tuple[float, float]] = DEFAULT_SPEED_BINS
 ) -> A3Selection:
-    """Return the top bin's selection, for speeds above the ID range.
-
-    OOD-Speed exceeds every ID bin. Clipping onto the highest one -- as
-    opposed to fitting a new bin for it -- is what keeps the speed-aware
-    level honest: it never sees OOD data.
-    """
+    """Use the highest trained speed bin for faster UEs."""
     if not selections:
         raise ValueError("no speed-aware selections to clip onto")
     top_low, top_high = bins[-1]
@@ -290,12 +227,7 @@ def clip_to_highest_bin(
 def select_split_oracle(
     rows: Sequence[Mapping[str, Any]], *, lambda_value: float, split: str
 ) -> A3Selection:
-    """Re-optimize on the evaluation split itself.
-
-    Explicitly marked non-deployable: it uses the test split's own
-    results, so it is an upper bound on A3, never a baseline a real
-    system could achieve.
-    """
+    """Select on the evaluation split; this result is not deployable."""
     eligible = _eligible_rows(rows, split=split, lambda_value=lambda_value)
     if not eligible:
         raise ValueError(f"no A3 rows from split {split!r}")
@@ -318,15 +250,7 @@ def build_selection_table(
     evaluation_splits: Sequence[str],
     bins: Sequence[tuple[float, float]] = DEFAULT_SPEED_BINS,
 ) -> list[dict[str, Any]]:
-    """Build every A3 selection the release reports, as flat rows.
-
-    Returns
-    -------
-    list of dict
-        One row per (level, lambda, and where applicable bin/split),
-        each carrying ``deployable`` and ``selected_on`` so a downstream
-        reader cannot mistake the oracle for a baseline.
-    """
+    """Return global, speed-aware, and split-oracle selections."""
     table: list[dict[str, Any]] = []
     for lambda_value in lambda_values:
         table.append(

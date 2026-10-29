@@ -11,40 +11,9 @@ from numpy.typing import NDArray
 
 @dataclass(slots=True)
 class EpisodeResult:
-    """
-    Storage class for network simulation results.
+    """Store episode arrays and metadata.
 
-    Single simulation steps or whole episodes (multiple steps) can be stored.
-
-    All arrays are expected to have a consistent leading dimension
-    corresponding to time steps.
-
-    Attributes
-    ----------
-    ep_name : str
-        Episode name.
-    ue_pos : NDArray[np.float32]
-        UE positions, shape (T, N_UE, 2).
-    distances_2d : NDArray[np.float32]
-        2D distances to BSs, shape (T, N_UE, N_bs).
-    distances_3d : NDArray[np.float32]
-        3D distances to BSs, shape (T, N_UE, N_bs).
-    rsrp : NDArray[np.float32]
-        Reference signal received power, shape (T, N_UE, N_cells).
-    sinr : NDArray[np.float32]
-        Signal-to-interference-plus-noise ratio, shape (T, N_UE, N_cells).
-    ue_move_angle : NDArray[np.float32]
-        UE movement angle, shape (T, N_UE).
-    meta_attrs : dict[str, Any]
-        Attributes from the per-episode ``meta`` group, if present.
-    meta : dict[str, Any]
-        Parsed datasets from the per-episode ``meta`` group, if present.
-    config_common : dict[str, Any]
-        Common configuration loaded from top-level ``meta/config_common``.
-    config : dict[str, Any]
-        Effective episode configuration. Typically this is ``config_common``
-        updated with episode-specific configuration such as
-        ``meta/config_varying`` and/or ``meta/config_full``.
+    Positions have shape (steps, UEs, 2); radio arrays (steps, UEs, cells).
     """
 
     ep_name: str
@@ -98,37 +67,7 @@ class EpisodeResult:
         strict: bool = True,
         warn: bool = True,
     ) -> "EpisodeResult":
-        """
-        Create an EpisodeResult instance from a dictionary.
-
-        Parameters
-        ----------
-        ep_name : str
-            Episode name.
-        data : dict[str, NDArray | np.ma.MaskedArray]
-            Mapping from dataset names to arrays.
-        meta_attrs : dict[str, Any] | None
-            Optional metadata attributes from the per-episode ``meta`` group.
-        meta : dict[str, Any] | None
-            Optional parsed metadata datasets from the per-episode ``meta`` group.
-        config_common : dict[str, Any] | None
-            File-level common configuration from ``meta/config_common``.
-        strict : bool
-            If True, all required array fields must be present. If False,
-            missing fields are replaced by empty arrays and a warning is emitted.
-        warn : bool
-            Show user warnings when expected keys are missing, i.e., not loaded.
-
-        Returns
-        -------
-        EpisodeResult
-            Constructed episode result instance.
-
-        Raises
-        ------
-        ValueError
-            If required fields are missing and ``strict=True``.
-        """
+        """Build an episode; strict mode rejects missing array fields."""
         update_dict: dict[str, Any] = {}
 
         meta_attrs = meta_attrs or {}
@@ -182,21 +121,7 @@ class EpisodeResult:
 
     @staticmethod
     def _deep_update(base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
-        """
-        Recursively update a nested dictionary.
-
-        Parameters
-        ----------
-        base : dict[str, Any]
-            Base dictionary.
-        update : dict[str, Any]
-            Update dictionary.
-
-        Returns
-        -------
-        dict[str, Any]
-            Deep-merged dictionary.
-        """
+        """Merge nested dictionaries without changing either input."""
         result = deepcopy(base)
         for key, value in update.items():
             if (
@@ -215,29 +140,7 @@ class EpisodeResult:
         config_common: dict[str, Any],
         meta: dict[str, Any],
     ) -> dict[str, Any]:
-        """
-        Build the effective per-episode configuration.
-
-        Merge priority:
-        1. ``config_common``
-        2. ``meta['config_varying']`` if present
-        3. ``meta['config_full']`` if present
-
-        If ``config_full`` exists, it usually already represents the complete
-        configuration. It is still applied last to make precedence explicit.
-
-        Parameters
-        ----------
-        config_common : dict[str, Any]
-            File-level common configuration.
-        meta : dict[str, Any]
-            Episode metadata.
-
-        Returns
-        -------
-        dict[str, Any]
-            Effective episode configuration.
-        """
+        """Merge common, varying, then full episode configuration."""
         config = deepcopy(config_common)
 
         config_varying = meta.get("config_varying")
@@ -251,19 +154,7 @@ class EpisodeResult:
         return config
 
     def validate_shapes(self) -> None:
-        """
-        Validate consistency of array shapes.
-
-        Ensures
-        -------
-        - All arrays share the same number of time steps ``T``
-        - UE dimension consistency where applicable
-
-        Raises
-        ------
-        ValueError
-            If inconsistencies are detected.
-        """
+        """Check that arrays share time and UE dimensions."""
         shapes: dict[str, tuple[int, ...]] = {}
         for key, value in self.to_dict().items():
             if key == "ep_name" or not isinstance(value, np.ndarray):

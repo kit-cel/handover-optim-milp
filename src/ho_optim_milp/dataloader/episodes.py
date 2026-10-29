@@ -54,22 +54,7 @@ def episode_shapes(path: str | Path) -> list[tuple[str, int, int, int]]:
 def load_episode(
     path: str | Path, episode_idx: int, *, max_steps: int | None = None
 ) -> EpisodeResult:
-    """Load a single episode from a merged network-simulation H5 file.
-
-    Parameters
-    ----------
-    path
-        HDF5 file containing ``ep_XXXX`` groups.
-    episode_idx
-        Position in the sorted list of episode groups.
-    max_steps
-        Optional prefix length for a short local run.
-
-    Raises
-    ------
-    IndexError
-        If ``episode_idx`` is out of range for this file.
-    """
+    """Load one recorded episode, optionally limited to a step prefix."""
     path = Path(path)
     with h5py.File(path, "r") as handle:
         names = sorted(name for name in handle if name.startswith("ep_"))

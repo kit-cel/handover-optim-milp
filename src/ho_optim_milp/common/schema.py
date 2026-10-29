@@ -80,18 +80,13 @@ METRIC_NUM_HOF_COLUMN = "num_hof"
 METRIC_HOF_RATE_COLUMN = "hof_rate"
 METRIC_OBJECTIVE_COLUMN = "ho_objective_value"
 
-# Link-failure breakdown, mirroring
-# :data:`mobile_network_sim.rrc.flags.LINK_FAILURE_CAUSES`. Splitting the
-# RLF count by cause is what makes an A3-versus-policy comparison
-# diagnosable: handing over too eagerly and too late both raise num_rlf,
-# but they raise *different* causes.
+# Link-failure causes distinguish early and late handover failures.
 METRIC_NUM_RLF_NO_HO_COLUMN = "num_rlf_no_ho"
 METRIC_NUM_HOF_PREP_COLUMN = "num_hof_prep"
 METRIC_NUM_HOF_CMD_COLUMN = "num_hof_cmd"
 METRIC_NUM_HOF_EXEC_COLUMN = "num_hof_exec"
 
-#: Per-cause link-failure counts, in reporting order. These sum to
-#: :data:`METRIC_NUM_RLF_COLUMN`.
+# Per-cause counts sum to METRIC_NUM_RLF_COLUMN.
 LINK_FAILURE_COUNT_COLUMNS = (
     METRIC_NUM_RLF_NO_HO_COLUMN,
     METRIC_NUM_HOF_PREP_COLUMN,
@@ -106,8 +101,7 @@ HANDOVER_FAILURE_COUNT_COLUMNS = (
     METRIC_NUM_HOF_EXEC_COLUMN,
 )
 
-#: Every aggregated metric column, in reporting order. Each method emits
-#: all of them, so a merged table has no method-dependent holes.
+# Shared metric columns in reporting order.
 METRIC_COLUMNS = (
     METRIC_SIMULATED_TIME_COLUMN,
     METRIC_SIMULATED_STEPS_COLUMN,
@@ -127,9 +121,7 @@ METRIC_COLUMNS = (
     METRIC_OBJECTIVE_COLUMN,
 )
 
-# --------------------------------------------------------------------------
 # Per-step trajectory columns.
-# --------------------------------------------------------------------------
 
 STEP_SERVING_SINR_COLUMN = "serving_sinr_db"
 STEP_SERVING_CAPACITY_COLUMN = "serving_capacity"
@@ -140,9 +132,7 @@ STEP_HO_EXEC_END_COLUMN = "i_ho_exec_end"
 STEP_RLF_RUNNING_COLUMN = "i_rlf_running"
 STEP_RLF_START_COLUMN = "i_rlf_start"
 
-#: Per-step columns every method writes, with identical meaning. This is
-#: the slice a consumer can compare across methods without knowing which
-#: produced it -- and the slice BC/AIRL read as expert demonstrations.
+# Shared per-step columns for MILP, A3, and downstream learning.
 STEP_SHARED_COLUMNS = (
     MILP_TIME_STEP_COLUMN,
     MILP_PCELL_COLUMN,
@@ -157,20 +147,8 @@ STEP_SHARED_COLUMNS = (
 )
 
 
-# --------------------------------------------------------------------------
-# Per-cell trajectory columns.
-# --------------------------------------------------------------------------
-#
-# The full per-cell radio view is stored alongside the serving-cell
-# scalars so a solved trajectory can be re-checked, and so a consumer can
-# rank neighbour cells, without re-reading and re-filtering the episode
-# HDF5. Each quantity is flattened into one column per cell rather than a
-# nested list column, so readers can access individual cells directly.
-#
-# The naming is defined here rather than inline at the write site so the
-# readers (the offline analyses rank neighbours by exactly these columns)
-# cannot drift from the writer -- the same reasoning that makes every
-# other name in this module producer-owned.
+# Per-cell columns keep radio values available without reopening HDF5.
+# Shared names prevent readers from drifting from the writer.
 
 STEP_PER_CELL_SINR_PREFIX = "sinr_db"
 STEP_PER_CELL_CAPACITY_PREFIX = "capacity"

@@ -1,16 +1,4 @@
-"""Per-step trajectory frames, in one shared column layout.
-
-The per-step solution is not a debugging extra: the MILP's ``pcell``
-sequence *is* the expert demonstration that behaviour cloning and AIRL
-learn from. Storing only aggregated metrics would leave the release
-without any expert data at all.
-
-Both methods write :data:`~.schema.STEP_SHARED_COLUMNS` with identical
-meaning, so a consumer can compare a MILP trajectory against an A3 one
-without knowing which produced it. Beyond that shared core each method
-adds its own internals -- the MILP's auxiliary variables, the reference's
-RRC flags -- under names that cannot collide.
-"""
+"""Build per-step MILP and A3 trajectory tables with shared column names."""
 
 from __future__ import annotations
 
@@ -41,11 +29,7 @@ from .schema import (
     per_cell_sinr_column,
 )
 
-# MILP auxiliary variables are stored verbatim. They are what makes a
-# solved instance *reconstructible*: without the N310/N311 counters, the
-# T310 countdown and the mode selectors, a stored pcell trajectory cannot
-# be checked against the constraint system that produced it, and the
-# equation-by-equation audit could not be re-run on released data.
+# Store MILP auxiliaries so saved solutions can be checked against constraints.
 _MILP_SCALAR_EXTRAS = (
     "i_q_in",
     "i_q_out",
@@ -121,21 +105,7 @@ def _shared_frame_columns(
 
 
 def milp_step_frame(results: Mapping[str, np.ndarray]) -> Any:
-    """Build the per-step frame for one solved MILP trajectory.
-
-    Parameters
-    ----------
-    results
-        The mapping returned by
-        :meth:`~ho_optim_milp.optimization.milp.HandoverOptimizerMILP.extract_results`.
-
-    Returns
-    -------
-    pandas.DataFrame
-        One row per time step, carrying the shared columns plus every
-        auxiliary MILP variable needed to reconstruct and re-audit the
-        solution.
-    """
+    """Convert one MILP solution into a per-step trajectory table."""
     pcell = np.asarray(results[MILP_PCELL_COLUMN])
     sinr = np.asarray(results["sinr_db"])
     serving_sinr = sinr[pcell, np.arange(pcell.shape[0])]
@@ -182,25 +152,7 @@ def reference_step_frame(
     q_in: np.ndarray | None = None,
     q_out: np.ndarray | None = None,
 ) -> Any:
-    """Build the per-step frame for one UE of a reference simulation.
-
-    Parameters
-    ----------
-    flags
-        Per-step RRC flag arrays shaped ``(n_steps, n_ue)``, as returned
-        by a reference simulation.
-    sinr_db
-        Raw SINR shaped ``(n_bs, n_ue, n_steps)``. It remains the capacity
-        source and is stored under the existing ``sinr_db_<cell>`` names.
-    ue_index
-        Which UE of the episode this frame describes.
-
-    Returns
-    -------
-    pandas.DataFrame
-        One row per time step, carrying the shared columns plus the full
-        RRC flag set for this UE.
-    """
+    """Convert one A3 run into a per-step trajectory table."""
     pcell = np.asarray(flags["pcell"])[:, ue_index]
     serving_sinr = sinr_db[pcell, ue_index, np.arange(pcell.shape[0])]
 

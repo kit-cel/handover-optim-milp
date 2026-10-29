@@ -29,29 +29,7 @@ def _integer_solution(values: Any) -> np.ndarray:
 
 
 class ResultExtractor:
-    """Extracts, computes, and logs results from a solved MILP model.
-
-    Instantiate *after* optimization is complete.  All Gurobi ``.X`` reads
-    happen once in ``__init__`` and are cached as plain NumPy arrays so that
-    every subsequent metric or logging call is fast and free of Gurobi I/O.
-
-    Parameters
-    ----------
-    vars : ModelVars
-        Gurobi decision-variable containers for the solved model.
-    data : ProblemData
-        Problem input data (RSRP, SINR, dimensions, …).
-    rrc_consts : RRCConstants
-        RRC timer/counter constants, already converted to time-steps.
-    simulation_id : str
-        Unique simulation identifier (propagated into metrics dict).
-    lambda_r : float
-        Lagrange multiplier used in the objective.
-    ep_name : str
-        Episode name used for file naming.
-    log_dir : str
-        Root directory for CSV output.
-    """
+    """Read solved MILP variables and derive metrics and snapshots."""
 
     def __init__(
         self,
@@ -64,12 +42,7 @@ class ResultExtractor:
         ep_name: str,
         log_dir: str,
     ) -> None:
-        """Cache all Gurobi ``.X`` arrays from the solved model.
-
-        Reading ``.X`` triggers a round-trip to the Gurobi solver object.
-        Caching every array once here avoids repeated solver calls in the
-        metric and snapshot methods that follow.
-        """
+        """Cache solved Gurobi variables as NumPy arrays."""
         self._data = data
         self._rrc_consts = rrc_consts
         self._simulation_id = simulation_id
@@ -169,25 +142,15 @@ class ResultExtractor:
         }
 
     def get_result_metrics(self, obj_value: float) -> dict[int, dict[str, Any]]:
-        """Compute and return scalar performance metrics.
-
-        Parameters
-        ----------
-        obj_value : float
-            Optimal objective value from the solver (``model.ObjVal`` or
-            ``obj_expr.getValue()``).
-        """
+        """Return scalar metrics from the solved assignment."""
         dt_s = self._data.n_steps * self._rrc_consts.t_res_ms / 1_000
         c_mean = self._get_mean_capacity()
         t_connected = self._get_connected_time()
         num_ho = int(np.sum(self._ho_exec_end))
         num_pp, pp_per_s = self._get_num_pp()
 
-        # Built through the shared row builder so the MILP and the
-        # reference simulation cannot drift on how an undefined ratio is
-        # spelled, or on which columns exist at all -- they already had.
-        # link_failure_counts=None marks the MILP: its formulation forbids
-        # a cell change while an RLF is recent, so no handover can fail.
+        # The MILP has no handover-failure counts: it forbids cell changes
+        # during recent RLFs. Use the shared metric schema.
         row = build_metric_row(
             ue_id=self._data.ue_idx,
             simulated_time_s=dt_s,
@@ -210,18 +173,7 @@ class ResultExtractor:
         subfolder: str | None = None,
         extra_columns: dict[str, Any] | None = None,
     ) -> None:
-        """Atomically replace a per-step snapshot CSV.
-
-        Parameters
-        ----------
-        file_name : str, optional
-            Output file name.  Auto-generated from simulation/episode/UE
-            metadata when omitted.
-        subfolder : str, optional
-            Subdirectory inside ``log_dir`` for the file.
-        extra_columns : dict[str, Any], optional
-            Additional scalar metadata columns repeated on every row.
-        """
+        """Atomically write per-step snapshots to CSV."""
         if file_name is None:
             file_name = (
                 f"optim_{self._simulation_id}_"
@@ -279,18 +231,7 @@ class ResultExtractor:
         )
 
     def _get_num_pp(self) -> tuple[int, float]:
-        """Count ping-pong handovers in the solved assignment.
-
-        Delegates to :func:`ho_optim_milp.common.metrics.count_ping_pongs`
-        so the MILP and the standalone A3 reference apply
-        one definition of ping-pong rather than three transcriptions of
-        it.
-
-        Returns
-        -------
-        tuple[int, float]
-            ``(num_pp, pp_per_second)``
-        """
+        """Return ping-pong count and rate using the shared definition."""
         num_pp = count_ping_pongs(
             self._pcells,
             self._ho_exec_end > 0.5,

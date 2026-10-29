@@ -1,13 +1,13 @@
 """Config for MILP optimization configuration class."""
 
-import os
+from datetime import datetime
+from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, Field, model_validator
+import yaml
+from mobile_network_sim.rrc import RRCConfig
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..common.base_config import BaseConfig
-from ..common.type_aliases import StrictPositiveInt
-from ..reference.rrc_config import RRCConfig
 
 
 class GurobiSolverConfig(BaseModel):
@@ -41,43 +41,28 @@ class WarmStartSolverConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class OptimConfig(BaseConfig):
-    """MILP optimization configuration class."""
+class OptimConfig(BaseModel):
+    """MILP options with the simulator's RRC configuration."""
 
-    seed: StrictPositiveInt | None = Field(
-        default=None, description="Random seed for reproducibility."
-    )
-
-    load_dataset: StrictBool = Field(
-        default=False,
-        description="Whether to load an existing dataset or create a new one.",
-    )
-    dataset_path: str = Field(
-        default="sim_dataset.h5", description="Path to the dataset file."
-    )
-    save_dir: str = Field(
-        default="gurobi_optim_results",
-        description="Directory to save optimization results.",
-    )
-
-    show_plots: StrictBool = Field(default=False, description="Show plots.")
-    save_plots: StrictBool = Field(default=False, description="Save plots.")
-
-    lambda_r: StrictFloat = Field(
-        default=1.0,
-        description="Discount given in bit/s/Hz for each outage step that is avoided.",
-    )
-
-    discount_gamma: StrictFloat = Field(default=1.0, gt=0, le=1)
+    lambda_r: float = Field(default=1.0, ge=0)
+    discount_gamma: float = Field(default=1.0, gt=0, le=1)
     initial_access: Literal["free", "strongest_rsrp"] = "free"
     handover_target_mode: Literal["free", "rank1_neighbor"] = "free"
     gurobi: GurobiSolverConfig = Field(default_factory=GurobiSolverConfig)
     warm_start: WarmStartSolverConfig = Field(default_factory=WarmStartSolverConfig)
 
     rrc: "RRCConfig"
+    log_dir: Path = Path("logs")
+    simulation_id: str = Field(
+        default_factory=lambda: datetime.now().strftime("%Y%m%d%H%M%S%f")
+    )
+
+    model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
     def _validate_optimizer(self) -> "OptimConfig":
+        if self.rrc.handover_mode != "standard":
+            raise ValueError("The MILP supports standard handover only")
         if self.warm_start.enabled and (
             self.warm_start.candidate_k == 0
             and self.warm_start.candidate_delta_db == 0
@@ -86,43 +71,10 @@ class OptimConfig(BaseConfig):
         return self
 
     @classmethod
-    def from_yaml(
-        cls, path: str | None, simulation_id: str | None = None
-    ) -> "OptimConfig":
-        """Load an :class:`OptimConfig` from a YAML file.
-
-        Parameters
-        ----------
-        path:
-            Path to the YAML configuration file.
-        simulation_id:
-            Optional override for the simulation ID.  Raises if the file
-            already contains a non-``None`` simulation ID.
-        """
-        if path is None:
-            raise ValueError("Path to YAML configuration file must be provided.")
-        config_dict = cls._from_yaml(path)
-        config = cls(**config_dict)
-
-        file_sim_id = config_dict.get("simulation_id", None)
-        if simulation_id is not None:
-            if file_sim_id is not None:
-                raise ValueError(
-                    f"Simulation ID in yaml file is not None ({file_sim_id}), "
-                    "but a new simulation ID was provided."
-                )
-            if not isinstance(simulation_id, str):
-                raise TypeError("Simulation ID must be a string.")
-            config.update_recursively({"simulation_id": simulation_id})
-        config.path_to_config = str(path)
-
-        return config
-
-    @model_validator(mode="after")
-    def _set_log_directories(self) -> "OptimConfig":
-        """Create the log directory on disk after the model has been validated."""
-        log_dir = os.path.join(self.base_dir, self.log_dir)
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-
-        return self
+    def from_yaml(cls, path: str | Path) -> "OptimConfig":
+        """Load and validate an optimization YAML file."""
+        with Path(path).open("r", encoding="utf-8") as stream:
+            payload = yaml.safe_load(stream)
+        if not isinstance(payload, dict):
+            raise ValueError("Optimization config must be a YAML mapping")
+        return cls.model_validate(payload)

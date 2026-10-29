@@ -3,6 +3,9 @@ initial_access: free
 handover_target_mode: free
 rrc:
   t_res_ms: 40
+  phy_update_interval_ms: 40
+  msr_interval_ms: 40
+  handover_mode: standard
 
   q_in_db: -6
   q_out_db: -8

@@ -22,13 +22,10 @@ def _episode() -> EpisodeResult:
     )
 
 
-@pytest.mark.parametrize("backend", ["standalone", "simulator"])
-def test_reference_rows_and_steps_use_one_capacity_definition(backend: str) -> None:
-    if backend == "simulator":
-        pytest.importorskip("mobile_network_sim")
+def test_reference_rows_and_steps_use_one_capacity_definition() -> None:
     config = make_config().rrc
     results = reference_recorded_episode(
-        _episode(), config, lambda_r=1.0, backend=backend
+        _episode(), config, lambda_r=1.0
     )
     metrics, steps = results[0]
 
@@ -45,13 +42,10 @@ def test_reference_rows_and_steps_use_one_capacity_definition(backend: str) -> N
     assert {"l3_rsrp_dbm_0", "l1_qin_sinr_db_0", "q_in_0"} <= set(steps)
 
 
-@pytest.mark.parametrize("backend", ["standalone", "simulator"])
-def test_no_handover_keeps_radio_link_monitoring(backend: str) -> None:
-    if backend == "simulator":
-        pytest.importorskip("mobile_network_sim")
+def test_no_handover_keeps_radio_link_monitoring() -> None:
     metrics, steps = reference_recorded_episode(
         _episode(), make_config().rrc, lambda_r=1.0,
-        backend=backend, trigger_handovers=False,
+        trigger_handovers=False,
     )[0]
     assert metrics["num_ho"] == 0
     assert steps["i_prep_start"].sum() == 0

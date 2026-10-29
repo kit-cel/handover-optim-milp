@@ -10,15 +10,12 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from mobile_network_sim.rrc import RRCConfig
 
 from ..optimization.optim_config import OptimConfig
-from ..reference.rrc_config import RRCConfig
 
 
-ENVIRONMENT_FIELDS = {
-    "base_dir", "log_dir", "path_to_config", "simulation_id", "log_level",
-    "save_dir", "dataset_path", "show_plots", "save_plots",
-}
+ENVIRONMENT_FIELDS = {"log_dir", "simulation_id", "path_to_config"}
 
 
 def sha256(path: Path) -> str:

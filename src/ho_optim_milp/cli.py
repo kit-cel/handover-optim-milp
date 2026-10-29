@@ -9,9 +9,13 @@ from typing import Sequence
 
 import pandas as pd
 import yaml
+import mobile_network_sim
+from mobile_network_sim.rrc import RRCConfig
 
+from . import __version__
 from .dataloader.episodes import load_episode
 from .dataset import Dataset, validate_dataset
+from .dataset_generator.a3_protocol import DEFAULT_A3_PROTOCOL
 from .dataset_generator.recorded import build_recorded_dataset
 from .dataset_generator.recorded_results import (
     optimize_recorded_ue,
@@ -21,7 +25,6 @@ from .dataset_generator.reporting import publish_reports
 from .dataset_generator.storage import validate_episode, write_json, write_parquet
 from .integrations.simulator import generate_network_data
 from .optimization.optim_config import OptimConfig
-from .reference.rrc_config import RRCConfig
 
 
 def _add_recorded_input(parser: argparse.ArgumentParser) -> None:
@@ -46,8 +49,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     reference = commands.add_parser("run-a3", help="Replay A3 on one recorded episode.")
     _add_recorded_input(reference)
-    reference.add_argument("--backend", choices=("standalone", "simulator"),
-                           default="standalone")
 
     build = commands.add_parser(
         "build-dataset", help="Build a complete dataset from recorded HDF5 files."
@@ -58,9 +59,9 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--lambda", dest="lambdas", type=float, action="append",
                        required=True)
     build.add_argument("--a3-config", type=Path, action="append", required=True)
+    build.add_argument("--a3-search", action="store_true",
+                       help="Use the recorded coarse-to-fine A3 search protocol.")
     build.add_argument("--selection-split", required=True)
-    build.add_argument("--a3-backend", choices=("standalone", "simulator"),
-                       default="standalone")
     build.add_argument("--output-root", type=Path, required=True)
 
     validate = commands.add_parser("validate-dataset", help="Validate a dataset release.")
@@ -75,7 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     plot.add_argument("--output-root", type=Path, required=True)
 
     generate = commands.add_parser(
-        "generate-network-data", help="Generate radio data with the optional simulator."
+        "generate-network-data", help="Generate radio data with the simulator."
     )
     generate.add_argument("--config", type=Path, required=True)
     generate.add_argument("--output", type=Path, required=True)
@@ -112,6 +113,8 @@ def _command_optimize(args: argparse.Namespace) -> int:
         "method": "milp", "episode_index": args.episode_index,
         "ue_index": args.ue_index, "network_data": args.network_data.name,
         "config": args.config.name, "max_steps": args.max_steps,
+        "software": {"ho_optim_milp": __version__,
+                     "mobile_network_sim": mobile_network_sim.__version__},
     })
     print(f"Saved MILP result to {output}")
     return 0
@@ -121,7 +124,7 @@ def _command_run_a3(args: argparse.Namespace) -> int:
     config = RRCConfig.from_yaml(str(args.config))
     episode = _recorded_episode(args, config)
     results = reference_recorded_episode(
-        episode, config, lambda_r=0.0, backend=args.backend
+        episode, config, lambda_r=0.0
     )
     output = _output_directory(args.output_dir)
     metrics = pd.DataFrame([row for row, _steps in results])
@@ -132,10 +135,12 @@ def _command_run_a3(args: argparse.Namespace) -> int:
     write_parquet(output / "metrics.parquet", metrics)
     write_parquet(output / "trajectories.parquet", steps)
     write_json(output / "run.json", {
-        "method": "a3", "backend": args.backend,
+        "method": "a3", "rrc_engine": "mobile-network-sim",
         "episode_index": args.episode_index,
         "network_data": args.network_data.name,
         "config": args.config.name, "max_steps": args.max_steps,
+        "software": {"ho_optim_milp": __version__,
+                     "mobile_network_sim": mobile_network_sim.__version__},
     })
     print(f"Saved A3 results to {output}")
     return 0
@@ -155,7 +160,7 @@ def _command_build_dataset(args: argparse.Namespace) -> int:
     output = build_recorded_dataset(
         sources, config, args.lambdas, args.output_root,
         a3_profiles=profiles, selection_split=args.selection_split,
-        a3_backend=args.a3_backend,
+        a3_protocol=DEFAULT_A3_PROTOCOL if args.a3_search else None,
     )
     print(f"Built dataset at {output}")
     return 0

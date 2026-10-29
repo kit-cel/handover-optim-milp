@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 import gurobipy as gp
+from mobile_network_sim.rrc import RRCConfig, RRCStepUE
 
 from ho_optim_milp.optimization.milp import HandoverOptimizerMILP
 from ho_optim_milp.optimization.milp_result_extractor import (
@@ -10,7 +11,6 @@ from ho_optim_milp.optimization.milp_result_extractor import (
     _integer_solution,
 )
 from ho_optim_milp.optimization.optim_config import OptimConfig
-from ho_optim_milp.reference.rrc_config import RRCConfig
 from ho_optim_milp.result_manager.episode_result import EpisodeResult
 
 
@@ -27,6 +27,8 @@ def gurobi_license() -> None:
 def make_config(**options: object) -> OptimConfig:
     rrc = RRCConfig(
         t_res_ms=40,
+        phy_update_interval_ms=40,
+        msr_interval_ms=40,
         n310=1,
         n311=10,
         t310_ms=120,
@@ -70,26 +72,31 @@ def test_solver_integer_export_rounds_numerical_noise() -> None:
 
 
 def test_rlm_counters_default_to_specification_values() -> None:
-    config = RRCConfig()
+    config = RRCConfig(t_res_ms=40, phy_update_interval_ms=40, msr_interval_ms=40)
     assert config.t_res_ms == 40
     assert config.n310 == 1
     assert config.n311 == 1
-    overridden = RRCConfig(t_res_ms=40, n310=10, n311=10)
+    overridden = RRCConfig(t_res_ms=40, phy_update_interval_ms=40,
+                           msr_interval_ms=40, n310=10, n311=10)
     assert overridden.n310 == 10
     assert overridden.n311 == 10
 
 
 def test_a3_ttt_uses_the_rrc_step_grid() -> None:
-    assert RRCConfig(ho_event_config={"a3": {"ttt_ms": 0}}).t_res_ms == 40
-    assert RRCConfig(ho_event_config={"a3": {"ttt_ms": 80}}).t_res_ms == 40
+    base = dict(t_res_ms=40, phy_update_interval_ms=40, msr_interval_ms=40)
+    assert RRCStepUE(0, RRCConfig(**base, ho_event_config={
+        "a3": {"ttt_ms": 0, "hys": 0.0, "offset": 0.0}})).config.t_res_ms == 40
+    assert RRCStepUE(0, RRCConfig(**base, ho_event_config={
+        "a3": {"ttt_ms": 80, "hys": 0.0, "offset": 0.0}})).config.t_res_ms == 40
     with pytest.raises(ValueError, match="multiple of t_res_ms"):
-        RRCConfig(ho_event_config={"a3": {"ttt_ms": 64}})
+        RRCStepUE(0, RRCConfig(**base, ho_event_config={
+            "a3": {"ttt_ms": 64, "hys": 0.0, "offset": 0.0}}))
 
 
 def test_milp_rejects_t310_truncation() -> None:
     config = make_config()
     config.rrc.t310_ms = 100
-    with pytest.raises(ValueError, match="T310 duration must be a multiple"):
+    with pytest.raises(ValueError, match="t310_ms duration must be a multiple"):
         HandoverOptimizerMILP(config)
 
 

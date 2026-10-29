@@ -20,7 +20,6 @@ classifiers = [
 dynamic = ["dependencies"]
 
 [project.optional-dependencies]
-simulator = ["mobile-network-sim>=0.2,<0.3"]
 test = ["pytest>=9,<10", "pytest-cov>=6,<8"]
 
 [tool.setuptools.dynamic]

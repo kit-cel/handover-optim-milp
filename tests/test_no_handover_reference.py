@@ -1,8 +1,8 @@
-"""The standalone no-handover reference retains the radio link state machine."""
+"""No-handover replay retains radio-link monitoring in the simulator RRC."""
 
 import numpy as np
 
-from ho_optim_milp.reference.reference import RRCReferenceSimulation
+from ho_optim_milp.dataset_generator.recorded_results import reference_recorded_episode
 from ho_optim_milp.result_manager.episode_result import EpisodeResult
 
 from test_model_profiles import make_config
@@ -20,15 +20,17 @@ def test_no_handover_suppresses_a3_without_changing_recorded_radio() -> None:
         ue_move_angle=np.zeros((20, 1), dtype=np.float32),
     )
     config = make_config().rrc
-    a3 = RRCReferenceSimulation(config, episode)
-    no_handover = RRCReferenceSimulation(config, episode, trigger_handovers=False)
-    a3.run()
-    no_handover.run()
+    a3_metrics, a3_steps = reference_recorded_episode(
+        episode, config, lambda_r=0.0
+    )[0]
+    no_ho_metrics, no_ho_steps = reference_recorded_episode(
+        episode, config, lambda_r=0.0, trigger_handovers=False
+    )[0]
 
-    assert a3.get_per_ue_result_metrics()[0]["num_ho"] == 1
-    assert no_handover.get_per_ue_result_metrics()[0]["num_ho"] == 0
-    assert no_handover.ue_list[0].get_flags()["prep_start"].sum() == 0
-    np.testing.assert_array_equal(a3.sinr_db, no_handover.sinr_db)
+    assert a3_metrics["num_ho"] == 1
+    assert no_ho_metrics["num_ho"] == 0
+    assert no_ho_steps["i_prep_start"].sum() == 0
+    np.testing.assert_array_equal(a3_steps["sinr_db_0"], no_ho_steps["sinr_db_0"])
 
 
 def test_no_handover_still_detects_radio_link_failures() -> None:
@@ -45,13 +47,10 @@ def test_no_handover_still_detects_radio_link_failures() -> None:
         sinr=sinr,
         ue_move_angle=np.zeros((20, 1), dtype=np.float32),
     )
-    reference = RRCReferenceSimulation(
-        make_config().rrc, episode, trigger_handovers=False
-    )
-    reference.run()
-    metrics = reference.get_per_ue_result_metrics()[0]
-    flags = reference.ue_list[0].get_flags()
+    metrics, steps = reference_recorded_episode(
+        episode, make_config().rrc, lambda_r=0.0, trigger_handovers=False
+    )[0]
 
     assert metrics["num_rlf"] > 0
-    assert metrics["num_rlf"] == int(flags["rlf_no_ho"].sum())
-    assert metrics["num_ho"] == int(flags["ho_success"].sum()) == 0
+    assert metrics["num_rlf"] == int(steps["i_rlf_no_ho"].sum())
+    assert metrics["num_ho"] == int(steps["i_ho_success"].sum()) == 0

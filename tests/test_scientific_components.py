@@ -4,10 +4,11 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from mobile_network_sim.rrc.cell_ranking import rank1_neighbor_table
+from mobile_network_sim.rrc.rrc_utils import count_ping_pongs
 
-from ho_optim_milp.common.metrics import count_ping_pongs
-from ho_optim_milp.dataloader.cell_ranking import rank1_neighbor_table
-from ho_optim_milp.dataloader.preprocessing import preprocess_dataset
+from ho_optim_milp.dataloader.preprocessing import preprocess_episode
+from ho_optim_milp.dataset_generator.recorded_results import reference_recorded_episode
 from ho_optim_milp.optimization.milp_dataclasses import ProblemData, RRCConstants
 from ho_optim_milp.optimization.milp_result_extractor import ResultExtractor
 
@@ -17,9 +18,8 @@ from test_model_profiles import make_config, make_episode
 def test_current_inputs_are_raw_but_rlm_uses_l1_filter() -> None:
     episode = make_episode()
     rrc = make_config().rrc
-    raw_rsrp, raw_sinr, q_in, q_out = preprocess_dataset(
-        episode, rrc, use_l3_filtering=False, ue_no=0
-    )
+    trace = preprocess_episode(episode, rrc)
+    raw_rsrp, raw_sinr, q_in, q_out = trace.as_2d(0)
     np.testing.assert_array_equal(raw_sinr, episode.sinr[:, 0, :].T)
     np.testing.assert_array_equal(raw_rsrp, episode.rsrp[:, 0, :].T)
     assert q_in.shape == q_out.shape == (2, 8)
@@ -27,10 +27,8 @@ def test_current_inputs_are_raw_but_rlm_uses_l1_filter() -> None:
     expected = (episode.sinr[1, 0, :] + episode.sinr[2, 0, :]) / 2
     np.testing.assert_array_equal(q_in[:, 2], expected >= rrc.q_in_db)
     np.testing.assert_array_equal(q_out[:, 2], expected <= rrc.q_out_db)
-    _, filtered_sinr, _, _ = preprocess_dataset(
-        episode, rrc, use_l3_filtering=True, ue_no=0
-    )
-    assert not np.array_equal(filtered_sinr, raw_sinr)
+    _, frame = reference_recorded_episode(episode, rrc, lambda_r=0.0)[0]
+    assert not np.array_equal(frame["l3_sinr_db_0"].to_numpy(), raw_sinr[0])
 
 
 def test_rank1_neighbor_excludes_current_cell_and_breaks_ties_stably() -> None:

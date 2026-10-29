@@ -9,7 +9,7 @@ import gurobipy as gp
 import numpy as np
 from gurobipy import GRB
 
-from ..dataloader.cell_ranking import rank1_neighbor_table
+from mobile_network_sim.rrc.cell_ranking import rank1_neighbor_table
 from ..dataloader.preprocessing import preprocess_episode
 from . import milp_variables as milp_vars
 from .base_optimizer import GurobiBaseOptimizer
@@ -78,12 +78,16 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
 
     def _validate_rrc_constants(self) -> None:
         """Validate derived RRC constants required by the MILP formulation."""
-        if self.config.rrc.t310_ms % self.config.rrc.t_res_ms != 0:
-            raise ValueError(
-                "MILP T310 duration must be a multiple of t_res_ms. "
-                f"Got t310_ms={self.config.rrc.t310_ms}, "
-                f"t_res_ms={self.config.rrc.t_res_ms}."
-            )
+        for name in (
+            "t310_ms", "t_ho_prep_ms_simulated", "t_ho_exec_ms_simulated",
+            "t_rlfr_ms_simulated", "t_mts_ms",
+        ):
+            if getattr(self.config.rrc, name) % self.config.rrc.t_res_ms:
+                raise ValueError(
+                    f"MILP {name} duration must be a multiple of t_res_ms"
+                )
+        if self.rrc_consts.n310 < 1 or self.rrc_consts.n311 < 1:
+            raise ValueError("MILP N310 and N311 must both be positive")
         if self.rrc_consts.t310 <= 1:
             raise ValueError(
                 "MILP T310 formulation requires T310 > 1 time step. "
@@ -187,13 +191,13 @@ class HandoverOptimizerMILP(GurobiBaseOptimizer):
             model_build + warm_start + self.telemetry["optimize_wall_time_s"]
         )
         if self._optimization_finished and self.model.SolCount > 0:
-            log_dir = Path(self.config.base_dir) / self.config.log_dir / "optimization"
+            log_dir = self.config.log_dir / "optimization"
             log_dir.mkdir(parents=True, exist_ok=True)
             self._extractor = ResultExtractor(
                 self.vars,
                 self.data,
                 self.rrc_consts,
-                simulation_id=self.rrc_config.simulation_id,
+                simulation_id=self.config.simulation_id,
                 lambda_r=self.config.lambda_r,
                 ep_name=self.ep_result.ep_name,
                 log_dir=str(log_dir),

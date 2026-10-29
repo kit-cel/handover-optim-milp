@@ -1,38 +1,7 @@
-"""L1 RLM filtering of precomputed radio traces.
+"""Prepare shared raw radio and L1 RLM inputs for MILP and A3.
 
-Both the MILP and the reference simulations consume the *same* arrays, so
-neither can gain an advantage from a preprocessing difference.
-
-What this module does and, importantly, does not do
----------------------------------------------------
-**L1 (radio link monitoring only).** A boxcar moving average of raw SINR
-with a *separate* window per threshold (``l1_q_in_filter_len_ms`` vs.
-``l1_q_out_filter_len_ms``), compared against ``q_in_db``/``q_out_db`` to
-produce the RLM in-sync/out-of-sync matrices. Every method shares these,
-so radio link monitoring is identical across MILP, A3, no-handover and
-any learned policy.
-
-**No L3 filtering.** L3 is a *measurement reporting* filter
-(TS 38.331 clause 5.5.3.2) and belongs to the entity that evaluates
-reporting criteria -- :class:`~mobile_network_sim.rrc.measurement_handler
-.MeasurementHandler`, which applies it internally. Applying it here as
-well filtered the A3 reference's decision input twice, which made A3
-react measurably too late: on one 6-UE episode, 59 handovers and 8 RLFs
-instead of 75 and 4.
-
-The MILP has no measurement entity and needs no L3 filtering: its
-Q-in/Q-out come from L1 above, and its objective is computed from raw
-SINR.
-
-**Raw SINR for capacity.** The achievable rate is a property of the
-channel, not of a measurement report, so it is computed from the
-unfiltered wideband SINR -- identically for every method, which is what
-makes the comparison fair.
-
-Filtering runs at ``t_res_ms`` (one measurement per RRC step);
-``l1_filter_sample_interval_ms`` is unused because the simulator has no
-faster PHY-update cadence.
-"""
+L3 filtering belongs to the RRC measurement handler; capacity uses raw SINR.
+L1 filtering uses float32 to match saved dataset values."""
 
 from __future__ import annotations
 
@@ -42,39 +11,20 @@ from typing import TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
-from ..reference.rrc_utils import l3_filtering
-from .ma_filter import MovingAverageFilter
+from mobile_network_sim.rrc.rrc_utils import BoxcarFilter
 
 if TYPE_CHECKING:
-    from ..reference.rrc_config import RRCConfig
+    from mobile_network_sim.rrc import RRCConfig
 
     from ..result_manager.episode_result import EpisodeResult
 
-# Filtering is carried out in float32, matching the dtype the released
-# dataset was generated with. Promoting to float64 here would change the
-# stored capacity values in the last digits and break exact reproduction.
+# Keep float32 for parity with stored dataset values.
 _FILTER_DTYPE = np.float32
 
 
 @dataclass(frozen=True, slots=True)
 class PreprocessedTrace:
-    """Filtered radio trace for one episode, shaped ``(n_bs, n_ue, n_steps)``.
-
-    Attributes
-    ----------
-    rsrp_dbm
-        Unfiltered RSRP. Fed to the RRC state machine, which applies L3
-        filtering itself; feeding it a pre-filtered value would filter
-        twice.
-    sinr_db
-        Unfiltered wideband SINR. The capacity/objective is computed from
-        this, and it is likewise fed to the RRC unfiltered.
-    q_in_mat, q_out_mat
-        RLM in-sync / out-of-sync indicators from L1-filtered SINR.
-    l1_sinr_qin_db, l1_sinr_qout_db
-        The two continuous L1 streams before thresholding.  They differ
-        whenever Qin and Qout use different window lengths.
-    """
+    """Raw radio data and L1 RLM indicators, shaped (cells, UEs, steps)."""
 
     rsrp_dbm: NDArray[np.floating]
     sinr_db: NDArray[np.floating]
@@ -99,12 +49,7 @@ class PreprocessedTrace:
         return int(self.sinr_db.shape[2])
 
     def for_ue(self, ue_idx: int) -> "PreprocessedTrace":
-        """Return the single-UE slice, still shaped ``(n_bs, 1, n_steps)``.
-
-        The UE axis is kept rather than squeezed so downstream shape
-        checks stay uniform; use :meth:`as_2d` where a bare
-        ``(n_bs, n_steps)`` array is wanted.
-        """
+        """Keep the UE axis when selecting one UE."""
         if not 0 <= ue_idx < self.n_ue:
             raise ValueError(f"ue_idx must be in [0, {self.n_ue - 1}], got {ue_idx}")
         sl = slice(ue_idx, ue_idx + 1)
@@ -150,15 +95,9 @@ def _l1_indicators(
     *,
     window_samples: int,
 ) -> NDArray[np.floating]:
-    """Boxcar-average raw SINR over ``window_samples`` along the time axis.
-
-    Vectorized over ``(n_ue, n_bs)``: :class:`BoxcarFilter` is elementwise,
-    so feeding it the whole ``(n_ue, n_bs)`` frame per step is arithmetically
-    identical to the historical per-UE loop while doing ``n_ue`` times fewer
-    Python-level iterations.
-    """
+    """Apply the L1 boxcar filter along the time axis."""
     filtered = np.zeros_like(raw_sinr_db, dtype=_FILTER_DTYPE)
-    boxcar = MovingAverageFilter(window_samples, dtype=_FILTER_DTYPE)
+    boxcar = BoxcarFilter(window_samples)
     for t in range(raw_sinr_db.shape[0]):
         filtered[t] = boxcar.step(raw_sinr_db[t].astype(_FILTER_DTYPE, copy=False))
     return filtered
@@ -168,23 +107,7 @@ def preprocess_episode(
     episode: "EpisodeResult",
     rrc_config: "RRCConfig",
 ) -> PreprocessedTrace:
-    """Filter one episode's raw radio trace for MILP/A3 consumption.
-
-    Parameters
-    ----------
-    episode
-        Episode container providing raw ``rsrp``/``sinr`` arrays shaped
-        ``(n_steps, n_ue, n_bs)`` (or ``(n_steps, n_bs)`` for a single UE).
-    rrc_config
-        Supplies the L1 window lengths, the RLM thresholds, and
-        ``t_res_ms``. Its L3 parameters are used by the RRC state
-        machine, not here.
-
-    Returns
-    -------
-    PreprocessedTrace
-        Arrays shaped ``(n_bs, n_ue, n_steps)``.
-    """
+    """Produce raw radio arrays and L1 RLM indicators for MILP and A3."""
     raw_rsrp_dbm = _as_steps_ue_bs(np.asarray(episode.rsrp))
     raw_sinr_db = _as_steps_ue_bs(np.asarray(episode.sinr))
 
@@ -221,50 +144,3 @@ def preprocess_episode(
         l1_sinr_qin_db=np.transpose(l1_sinr_q_in, (2, 1, 0)),
         l1_sinr_qout_db=np.transpose(l1_sinr_q_out, (2, 1, 0)),
     )
-
-
-def preprocess_dataset(
-    data: "EpisodeResult",
-    rrc_config: "RRCConfig",
-    use_l3_filtering: bool = True,
-    ue_no: int | None = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Prepare radio arrays for the standalone RRC reference.
-
-    The MILP uses :func:`preprocess_episode` directly. The standalone RRC
-    implementation expects L3-filtered measurement inputs, whereas the
-    simulator RRC implementation applies L3 internally.
-    """
-    trace = preprocess_episode(data, rrc_config)
-    rsrp = trace.rsrp_dbm
-    sinr = trace.sinr_db
-    if use_l3_filtering:
-        rsrp = _l3_measurements(rsrp, rrc_config)
-        sinr = _l3_measurements(sinr, rrc_config)
-    if ue_no is not None:
-        return (
-            rsrp[:, ue_no, :],
-            sinr[:, ue_no, :],
-            trace.q_in_mat[:, ue_no, :],
-            trace.q_out_mat[:, ue_no, :],
-        )
-    return rsrp, sinr, trace.q_in_mat, trace.q_out_mat
-
-
-def _l3_measurements(values: np.ndarray, config: "RRCConfig") -> np.ndarray:
-    """Apply the standalone reference's per-cell L3 measurement filter."""
-    n_bs, n_ue, n_steps = values.shape
-    filtered = np.empty((n_bs, n_ue, n_steps), dtype=_FILTER_DTYPE)
-    for ue_id in range(n_ue):
-        previous = values[:, ue_id, 0].astype(_FILTER_DTYPE, copy=True)
-        for step in range(n_steps):
-            current = l3_filtering(
-                f_old=previous,
-                m_new=values[:, ue_id, step].astype(_FILTER_DTYPE, copy=False),
-                k=config.l3_filter_coef,
-                t_sample=config.t_res_ms,
-                t_ref=config.l3_filter_sample_reference_interval_ms,
-            )
-            filtered[:, ue_id, step] = current
-            previous = current.astype(_FILTER_DTYPE, copy=True)
-    return filtered

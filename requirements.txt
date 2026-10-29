@@ -1,4 +1,5 @@
 gurobipy>=13.0.1,<14
+mobile-network-sim @ https://github.com/kit-cel/mobile-network-sim/archive/refs/tags/v0.2.0.zip
 h5py>=3.16,<4
 matplotlib>=3.10.8,<4
 numpy>=2.4.3,<3

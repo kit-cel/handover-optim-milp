@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from ho_optim_milp.dataset_generator.recorded import build_recorded_dataset
+from ho_optim_milp.dataset_generator.a3_protocol import A3SearchProtocol
 from ho_optim_milp.dataset import Dataset, validate_dataset
 from ho_optim_milp.cli import main as cli_main
 
@@ -39,7 +40,7 @@ def _short_network_data(path: Path) -> None:
         )
 
 
-def test_short_recorded_data_builds_release_without_simulator(tmp_path: Path) -> None:
+def test_short_recorded_data_builds_release_with_simulator_rrc(tmp_path: Path) -> None:
     try:
         model = gp.Model("license_probe")
         model.dispose()
@@ -54,6 +55,9 @@ def test_short_recorded_data_builds_release_without_simulator(tmp_path: Path) ->
         speed_bins=((0.0, 200.0),),
     )
     assert validate_dataset(root, verify_artifact_hashes=True)["artifact_count"] > 0
+    assert Dataset.open(root).metadata["software"] == {
+        "ho_optim_milp": "2.0.0.dev0", "mobile_network_sim": "0.2.0",
+    }
     assert pd.read_parquet(root / "optim_results/id_val/optim_results.parquet").shape[0] == 20
     split = Dataset.open(root).split("id_val")
     binary = split.milp_metrics("binary_rank1")
@@ -73,3 +77,29 @@ def test_short_recorded_data_builds_release_without_simulator(tmp_path: Path) ->
     ]) == 0
     assert (output / "plots/id_val/event_rates_vs_lambda.png").is_file()
     assert validate_dataset(root)["artifact_count"] > 0
+
+
+def test_short_release_accepts_coarse_to_fine_a3_search(tmp_path: Path) -> None:
+    try:
+        model = gp.Model("license_probe")
+        model.dispose()
+    except gp.GurobiError as error:
+        pytest.skip(f"Gurobi licence unavailable: {error}")
+    source = tmp_path / "network.h5"
+    _short_network_data(source)
+    protocol = A3SearchProtocol(
+        coarse_ttt_ms=(0.0, 40.0), coarse_hys_db=(0.0,),
+        coarse_offset_db=(0.0,), fine_ttt_ms=(80.0,),
+        fine_hys_db=(0.0,), fine_offset_db=(0.0,), top_k=1,
+        ttt_neighbor_radius=0, hys_neighbor_radius=0,
+        offset_neighbor_radius=0,
+    )
+    root = build_recorded_dataset(
+        {"id_val": source}, make_config(), [1.0], tmp_path / "a3_release",
+        a3_profiles=[make_config().rrc], selection_split="id_val",
+        a3_protocol=protocol, speed_bins=((0.0, 200.0),),
+    )
+    assert validate_dataset(root)["artifact_count"] > 0
+    search = pd.read_parquet(root / "reference_results/a3/search_metrics.parquet")
+    assert set(search["search_stage"]) == {"coarse", "fine"}
+    assert set(search["ttt_ms"]) == {0.0, 40.0, 80.0}

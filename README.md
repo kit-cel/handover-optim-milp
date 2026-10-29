@@ -14,7 +14,7 @@ preserves the code for the [paper](https://doi.org/10.1109/LCOMM.2026.3701321)
 and [published dataset](https://dx.doi.org/10.21227/9zk6-vb30). Current
 development uses schema 3.
 
-![Rate-outage trade-off in the published dataset](assets/rate_outage_pareto_frontiers_q-90-95-99.png)
+![Rate-outage comparison on dataset v3 ID-Test: MILP, R1-MILP, and A3 selection levels](assets/rate_outage_frontier_v3_id_test.png)
 
 ## Install
 

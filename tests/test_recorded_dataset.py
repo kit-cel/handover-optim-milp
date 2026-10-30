@@ -18,7 +18,8 @@ from test_model_profiles import make_config
 
 
 def _short_network_data(path: Path) -> None:
-    sinr = np.asarray([[12, 0]] * 4 + [[0, 12]] * 16, dtype=np.float32)[:, None, :]
+    sinr = np.asarray([[12, 0]] * 4 + [[0, 12]] * 4, dtype=np.float32)[:, None, :]
+    n_steps = sinr.shape[0]
     with h5py.File(path, "w") as handle:
         meta = handle.create_group("meta")
         meta.create_dataset("config_common", data=json.dumps({"t_res_ms": 40}))
@@ -26,10 +27,10 @@ def _short_network_data(path: Path) -> None:
         episode = handle.create_group("ep_0000")
         for name, values in {
             "sinr": sinr, "rsrp": sinr - 70.0,
-            "ue_pos": np.zeros((20, 1, 2), dtype=np.float32),
+            "ue_pos": np.zeros((n_steps, 1, 2), dtype=np.float32),
             "distances_2d": np.zeros_like(sinr),
             "distances_3d": np.zeros_like(sinr),
-            "ue_move_angle": np.zeros((20, 1), dtype=np.float32),
+            "ue_move_angle": np.zeros((n_steps, 1), dtype=np.float32),
         }.items():
             episode.create_dataset(name, data=values)
         episode.create_group("meta").create_dataset(
@@ -58,13 +59,13 @@ def test_short_recorded_data_builds_release_with_simulator_rrc(tmp_path: Path) -
     assert Dataset.open(root).metadata["software"] == {
         "ho_optim_milp": "2.0.0.dev0", "mobile_network_sim": "0.2.0",
     }
-    assert pd.read_parquet(root / "optim_results/id_val/optim_results.parquet").shape[0] == 20
+    assert pd.read_parquet(root / "optim_results/id_val/optim_results.parquet").shape[0] == 8
     split = Dataset.open(root).split("id_val")
     binary = split.milp_metrics("binary_rank1")
     assert len(binary) == 1
     assert len(split.milp_trajectory(
         episode_idx=0, ue_id=0, lambda_value=1.0, variant="binary_rank1",
-    )) == 20
+    )) == 8
     assert set(pd.read_parquet(root / "reference_results/a3/selections.parquet")["level"]) == {
         "global", "speed_aware", "split_oracle"
     }
